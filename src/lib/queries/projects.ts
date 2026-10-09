@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
 import type { ClientFilter } from '../../data'
 import type { Milestone, MilestoneInsert, Project, ProjectInsert, Update } from '../../types/db'
@@ -92,6 +92,30 @@ export function useUpdateMilestone() {
     resource: R.milestones,
     mutationFn: ({ id, patch }) => data.milestones.update(id, patch),
     change: ({ id, patch }) => ({ type: 'patch', id, patch }),
+  })
+}
+
+/** Moves milestones into `orderedIds` straight away and restores the old order if the write fails. */
+export function useReorderMilestones() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, orderedIds }: { projectId: string; orderedIds: string[] }) =>
+      data.milestones.reorder(projectId, orderedIds),
+    onMutate: async ({ projectId, orderedIds }) => {
+      const key = keys.list(R.milestones, { project_id: projectId })
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<Milestone[]>(key)
+      queryClient.setQueryData<Milestone[]>(key, (rows) =>
+        rows
+          ?.map((row) => ({ ...row, position: orderedIds.indexOf(row.id) + 1 }))
+          .sort((a, b) => a.position - b.position),
+      )
+      return { key, previous }
+    },
+    onError: (_error, _vars, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.all(R.milestones) }),
   })
 }
 

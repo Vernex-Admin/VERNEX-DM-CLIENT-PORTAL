@@ -21,6 +21,8 @@ export type Resource =
   | 'founder_box'
   | 'founder_inbox'
   | 'lead'
+  | 'reminder'
+  | 'ai_draft'
 
 export type Action = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'request_revision' | 'upload'
 
@@ -41,6 +43,8 @@ const STAFF: readonly Permission[] = [
   ...crud('service_request'),
   ...crud('action_item'),
   ...crud('lead'),
+  ...crud('reminder'),
+  ...crud('ai_draft'),
   'revision:view',
   'revision:edit',
   'brand_asset:view',
@@ -80,7 +84,7 @@ const CLIENT: readonly Permission[] = [
 
 export const POLICY: Record<UserRole, readonly Permission[]> = {
   // Only the founder reads the Founder Box; the PM sees none of it.
-  vernex_founder: [...STAFF, 'founder_inbox:view'],
+  vernex_founder: [...STAFF, 'founder_inbox:view', 'founder_inbox:edit'],
   vernex_pm: STAFF,
   client_admin: CLIENT,
   client_member: CLIENT,
@@ -117,6 +121,14 @@ export function can(
   if (needsApprover && profile.role === 'client_member' && !profile.can_approve) return false
 
   return true
+}
+
+/** Which side of the portal a profile belongs to; null when signed out. Used by route guards. */
+export type Audience = 'staff' | 'client'
+
+export function audienceOf(profile: Profile | null | undefined): Audience | null {
+  if (!profile || !profile.is_active) return null
+  return profile.role === 'vernex_founder' || profile.role === 'vernex_pm' ? 'staff' : 'client'
 }
 
 /** `can()` for the signed-in user. False while the session is loading. */

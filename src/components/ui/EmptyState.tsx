@@ -10,10 +10,13 @@ export type EmptyStateProps = {
   // One action, usually a single Button.
   action?: ReactNode
   icon?: LucideIcon
+  // 1 when the state fills a whole page (nothing else names it); otherwise 2, under the page's own h1.
+  headingLevel?: 1 | 2
   className?: string
 }
 
-export function EmptyState({ title, description, action, icon, className }: EmptyStateProps) {
+export function EmptyState({ title, description, action, icon, headingLevel = 2, className }: EmptyStateProps) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2'
   return (
     <div
       className={cn(
@@ -22,7 +25,7 @@ export function EmptyState({ title, description, action, icon, className }: Empt
       )}
     >
       {icon && <Icon icon={icon} size={24} className="mb-1 text-ink-muted" />}
-      <h3 className="text-[1.2rem] leading-snug text-ink">{title}</h3>
+      <Heading className="text-[1.2rem] leading-snug text-ink">{title}</Heading>
       <p className="text-ink-muted">{description}</p>
       {action && <div className="mt-3">{action}</div>}
     </div>

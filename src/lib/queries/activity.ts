@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
 import type {
+  ActivityFilter,
   ActionItemFilter,
   BrandAssetUpload,
   CommentFilter,
@@ -8,6 +9,7 @@ import type {
   FileFilter,
   FounderMessage,
   SocialMetricsFilter,
+  TopPostsFilter,
 } from '../../data'
 import type { ActionItem, ActionItemInsert, Comment, Feedback, FileRecord, Profile } from '../../types/db'
 import { keys, R } from './keys'
@@ -16,6 +18,11 @@ import { nowIso, tempId, useOptimisticMutation } from './optimistic'
 function useCurrentProfileId(): () => string {
   const queryClient = useQueryClient()
   return () => queryClient.getQueryData<Profile | null>(keys.detail(R.session, 'current'))?.id ?? ''
+}
+
+/** The dashboard feed: newest first, never internal. */
+export function useActivity(filter: ActivityFilter = {}) {
+  return useQuery({ queryKey: keys.list(R.activity, filter), queryFn: () => data.activity.recent(filter) })
 }
 
 // --- Action items -----------------------------------------------------------
@@ -100,6 +107,7 @@ export function useAddComment() {
         created_at: nowIso(),
       },
     }),
+    invalidate: [R.activity],
   })
 }
 
@@ -130,6 +138,8 @@ export function useUploadBrandAsset() {
         mime_type: input.mime_type ?? null,
         size_bytes: input.size_bytes ?? null,
         storage_key: '',
+        url: input.url ?? null,
+        external_url: null,
         version: 1,
         uploaded_by: uploaderId() || null,
         visibility: 'client',
@@ -180,10 +190,12 @@ export function useSendFounderMessage() {
         rating: null,
         subject: input.subject,
         message: input.message,
+        private_from_team: input.private_from_team ?? false,
         status: 'new',
         submitted_by: senderId(),
         created_at: nowIso(),
         responded_at: null,
+        reply: null,
       },
     }),
   })
@@ -197,6 +209,24 @@ export function useSocialMetrics(filter: SocialMetricsFilter | undefined) {
     queryKey: keys.list(R.socialMetrics, filter),
     queryFn: () => data.socialMetrics.listDaily(filter as SocialMetricsFilter),
     enabled: Boolean(filter),
+  })
+}
+
+/** Posts published in the range, highest reach first. */
+export function useTopPosts(filter: TopPostsFilter | undefined) {
+  return useQuery({
+    queryKey: keys.list(R.socialMetrics, { scope: 'top_posts', ...filter }),
+    queryFn: () => data.socialMetrics.topPosts(filter as TopPostsFilter),
+    enabled: Boolean(filter),
+  })
+}
+
+/** When the numbers were last pulled from the platforms. */
+export function useLastSyncedAt(clientId: string | undefined) {
+  return useQuery({
+    queryKey: keys.detail(R.socialMetrics, clientId),
+    queryFn: () => data.socialMetrics.lastSyncedAt({ client_id: clientId as string }),
+    enabled: Boolean(clientId),
   })
 }
 

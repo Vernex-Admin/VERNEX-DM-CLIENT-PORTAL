@@ -50,6 +50,7 @@ export function DropdownMenu({ items, trigger, align = 'start', className }: Dro
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
     // Depends on open only: focus moves when the menu opens, not when the items array is re-created.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   function close(returnFocus: boolean) {
@@ -117,7 +118,7 @@ export function DropdownMenu({ items, trigger, align = 'start', className }: Dro
                 item.onSelect()
               }}
               className={cn(
-                'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[1rem] whitespace-nowrap sm:min-h-[32px]',
+                'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[1rem] whitespace-nowrap lg:min-h-[32px]',
                 'transition-colors duration-150 enabled:hover:bg-ink/5 focus-visible:bg-ink/5 focus-visible:-outline-offset-2',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 item.danger ? 'text-bad' : 'text-ink',

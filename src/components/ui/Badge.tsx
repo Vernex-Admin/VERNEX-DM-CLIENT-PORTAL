@@ -8,6 +8,7 @@ const tones: Record<Tone, string> = {
   ok: 'bg-ok text-surface',
   info: 'bg-info text-surface',
   bad: 'bg-bad text-surface',
+  warn: 'bg-warn text-surface',
 }
 
 export type BadgeProps = {

@@ -23,7 +23,8 @@ function readStoredProfileId(): string | null {
   } catch {
     // Storage can be blocked; fall through to the default.
   }
-  return SEED_IDS.founder
+  // Nobody is signed in on a first visit, so the login pages are the way in.
+  return null
 }
 
 let currentProfileId: string | null = readStoredProfileId()

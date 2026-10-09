@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --paper: #FAF7F2;
   --surface: #FFFFFF;
   --ink: #1C1915;
@@ -8,4 +8,5 @@
   --ok: #2F7D4F;
   --info: #2C5F8A;
   --bad: #B42318;
+  --warn: #A15C07;
 }

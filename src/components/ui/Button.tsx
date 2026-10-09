@@ -3,7 +3,7 @@ import { LoaderCircle } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Icon } from '../Icon'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
 export type ButtonSize = 'sm' | 'md'
 
 export type ButtonProps = ComponentProps<'button'> & {
@@ -16,13 +16,14 @@ const variants: Record<ButtonVariant, string> = {
   primary: 'border-signal bg-signal text-surface enabled:hover:bg-signal/90 enabled:active:bg-signal/80',
   secondary: 'border-rule bg-surface text-ink enabled:hover:bg-ink/5 enabled:active:bg-ink/10',
   ghost: 'border-transparent bg-transparent text-ink enabled:hover:bg-ink/5 enabled:active:bg-ink/10',
+  success: 'border-ok bg-ok text-surface enabled:hover:bg-ok/90 enabled:active:bg-ok/80',
   danger: 'border-bad bg-bad text-surface enabled:hover:bg-bad/90 enabled:active:bg-bad/80',
 }
 
 // 44px tap height on mobile for both sizes; the compact heights apply from 640px up.
 const sizes: Record<ButtonSize, string> = {
-  sm: 'min-h-[44px] px-3 text-sm sm:min-h-[30px]',
-  md: 'min-h-[44px] px-4 text-[1rem] sm:min-h-[36px]',
+  sm: 'min-h-[44px] px-3 text-sm lg:min-h-[30px]',
+  md: 'min-h-[44px] px-4 text-[1rem] lg:min-h-[36px]',
 }
 
 export function Button({

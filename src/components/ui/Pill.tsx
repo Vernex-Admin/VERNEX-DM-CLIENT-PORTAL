@@ -8,6 +8,7 @@ const dots: Record<Tone, string> = {
   ok: 'bg-ok',
   info: 'bg-info',
   bad: 'bg-bad',
+  warn: 'bg-warn',
 }
 
 export type PillProps = {

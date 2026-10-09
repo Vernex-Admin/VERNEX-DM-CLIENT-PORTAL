@@ -53,7 +53,7 @@ function ToastItem({ toast, dismiss }: { toast: ToastRecord; dismiss: (id: numbe
         type="button"
         aria-label="Dismiss"
         onClick={() => dismiss(toast.id)}
-        className="inline-flex size-[44px] shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors duration-150 hover:bg-ink/5 hover:text-ink sm:size-[28px]"
+        className="inline-flex size-[44px] shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors duration-150 hover:bg-ink/5 hover:text-ink lg:size-[28px]"
       >
         <Icon icon={X} size={16} />
       </button>

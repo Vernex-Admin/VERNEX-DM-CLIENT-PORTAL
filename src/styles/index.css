@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 @import './tokens.css';
 
 @source not '../../docs';
@@ -27,6 +27,7 @@
   --color-ok: var(--ok);
   --color-info: var(--info);
   --color-bad: var(--bad);
+  --color-warn: var(--warn);
 }
 
 @theme {

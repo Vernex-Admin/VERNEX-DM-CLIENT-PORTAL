@@ -33,7 +33,13 @@ export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
         className,
       )}
     >
-      {src ? <img src={src} alt="" className="size-full object-cover" /> : <span aria-hidden="true">{initials(name)}</span>}
+      {src ? (
+        <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+      ) : (
+        // Drawn by CSS rather than written as text: the initials are decoration, and as text they
+        // would make a button labelled "Account menu for Arun Kumar" show words its name lacks.
+        <span aria-hidden="true" data-initials={initials(name)} className="before:content-[attr(data-initials)]" />
+      )}
     </span>
   )
 }
