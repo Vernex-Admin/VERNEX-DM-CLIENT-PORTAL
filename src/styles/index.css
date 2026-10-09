@@ -1,0 +1,99 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@source not '../../docs';
+
+/* hover: also matches [data-hover] so /dev/ui can show the hover state statically. */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  &[data-hover] {
+    @slot;
+  }
+}
+
+/* Colours come from tokens.css only: the default Tailwind palette is removed. */
+@theme inline {
+  --color-*: initial;
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-rule: var(--rule);
+  --color-signal: var(--signal);
+  --color-ok: var(--ok);
+  --color-info: var(--info);
+  --color-bad: var(--bad);
+}
+
+@theme {
+  --font-display: 'Fraunces', 'Noto Sans Tamil', 'Noto Sans Devanagari', serif;
+  --font-sans: 'IBM Plex Sans', 'Noto Sans Tamil', 'Noto Sans Devanagari', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Noto Sans Tamil', 'Noto Sans Devanagari', monospace;
+
+  /* rounded-card: cards and buttons. rounded-field: inputs and pills. */
+  --radius-*: initial;
+  --radius-card: 6px;
+  --radius-field: 4px;
+
+  /* No shadows, glow or blur: the named scales are removed. */
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+
+  --default-transition-duration: 150ms;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--rule);
+  }
+
+  html {
+    font-size: 15px;
+  }
+
+  /* Page does not scroll behind an open Dialog or Drawer. */
+  html:has(dialog:modal) {
+    overflow: hidden;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-weight: 400;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+  }
+
+  /* Keyboard focus only: pointer clicks on buttons and links show no ring. */
+  :focus-visible {
+    outline: 2px solid var(--info);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
