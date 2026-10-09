@@ -9,7 +9,7 @@ export function Switch({ label, className, ...props }: SwitchProps) {
   return (
     <label
       className={cn(
-        'inline-flex min-h-[44px] cursor-pointer items-center gap-2.5 sm:min-h-0',
+        'inline-flex min-h-[44px] cursor-pointer items-center gap-2.5 lg:min-h-0',
         'has-disabled:cursor-not-allowed has-disabled:opacity-50',
         className,
       )}

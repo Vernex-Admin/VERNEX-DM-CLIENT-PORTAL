@@ -16,7 +16,7 @@ export function CardHeader({ title, description, action, className }: CardHeader
   return (
     <div className={cn('flex items-start justify-between gap-3 border-b border-rule px-4 py-3', className)}>
       <div className="min-w-0">
-        <h3 className="text-[1.0667rem] leading-snug text-ink">{title}</h3>
+        <h2 className="text-[1.0667rem] leading-snug text-ink">{title}</h2>
         {description && <p className="text-sm text-ink-muted">{description}</p>}
       </div>
       {action}

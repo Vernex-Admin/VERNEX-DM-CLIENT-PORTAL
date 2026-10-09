@@ -12,6 +12,8 @@ export type ModalProps = {
   children: ReactNode
   // Usually the confirm and cancel buttons.
   footer?: ReactNode
+  // Asked when Esc is pressed; return false to keep the dialog open, e.g. while there are unsaved changes.
+  beforeClose?: () => boolean
 }
 
 type Placement = 'center' | 'right'
@@ -39,6 +41,7 @@ export function ModalSurface({
   description,
   children,
   footer,
+  beforeClose,
   placement,
 }: ModalProps & { placement: Placement }) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -58,6 +61,9 @@ export function ModalSurface({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onClose={onClose}
+      onCancel={(event) => {
+        if (beforeClose && !beforeClose()) event.preventDefault()
+      }}
       // The dialog element has no padding, so a click that lands on it is a click on the backdrop.
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
@@ -84,7 +90,7 @@ export function ModalSurface({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="-mr-2 inline-flex size-[44px] shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors duration-150 hover:bg-ink/5 hover:text-ink sm:size-[32px]"
+            className="-mr-2 inline-flex size-[44px] shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors duration-150 hover:bg-ink/5 hover:text-ink lg:size-[32px]"
           >
             <Icon icon={X} />
           </button>

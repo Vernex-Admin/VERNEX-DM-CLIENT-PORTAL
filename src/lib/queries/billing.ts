@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { data } from '../../data'
-import type { ClientFilter, ServiceRequestSubmission } from '../../data'
+import type { ClientFilter, InvoicePatch, ServiceRequestSubmission } from '../../data'
 import type { Invoice, InvoiceInsert, InvoiceWithItems, ServiceRequest, Update } from '../../types/db'
 import { invoiceTotals } from '../money'
 import { keys, R } from './keys'
@@ -44,10 +44,14 @@ export function useCreateInvoice() {
 }
 
 export function useUpdateInvoice() {
-  return useOptimisticMutation<Invoice, { id: string; patch: Update<Invoice> }>({
+  return useOptimisticMutation<Invoice, { id: string; patch: InvoicePatch }>({
     resource: R.invoices,
     mutationFn: ({ id, patch }) => data.invoices.update(id, patch),
-    change: ({ id, patch }) => ({ type: 'patch', id, patch }),
+    change: ({ id, patch: { items, ...columns } }) => ({
+      type: 'patch',
+      id,
+      patch: { ...columns, ...(items ? invoiceTotals(items) : {}) },
+    }),
   })
 }
 
@@ -83,6 +87,8 @@ export function useSubmitServiceRequest() {
         description: input.description ?? null,
         status: 'submitted',
         quote_amount_minor: null,
+        desired_date: input.desired_date ?? null,
+        attachment_names: input.attachment_names ?? [],
         requested_by: null,
         created_at: nowIso(),
       },

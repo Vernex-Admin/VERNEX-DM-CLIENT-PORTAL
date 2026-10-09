@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
-import type { DeliverableFilter, RevisionRequest } from '../../data'
+import type { DeliverableFilter, PublishVersion, RevisionRequest } from '../../data'
 import type { Deliverable, DeliverableInsert, Profile, Revision, Update } from '../../types/db'
 import { keys, R } from './keys'
 import { nowIso, tempId, useOptimisticMutation } from './optimistic'
@@ -13,6 +13,15 @@ export function useDeliverable(id: string | undefined) {
   return useQuery({
     queryKey: keys.detail(R.deliverables, id),
     queryFn: () => data.deliverables.get(id as string),
+    enabled: Boolean(id),
+  })
+}
+
+/** Every uploaded version of a deliverable, oldest first. */
+export function useDeliverableVersions(id: string | undefined) {
+  return useQuery({
+    queryKey: keys.list(R.deliverableVersions, { deliverable_id: id }),
+    queryFn: () => data.deliverables.listVersions(id as string),
     enabled: Boolean(id),
   })
 }
@@ -30,6 +39,10 @@ export function useCreateDeliverable() {
         due_date: null,
         platform: null,
         caption: null,
+        is_final: false,
+        bulk_approvable: false,
+        thumbnail_url: null,
+        visibility: 'internal',
         ...input,
         id: tempId(),
         client_id: '',
@@ -66,6 +79,33 @@ export function useDeleteDeliverable() {
   })
 }
 
+/** Staff upload the next version: by file or Google Drive link. A client-visible one goes to review. */
+export function usePublishVersion() {
+  return useOptimisticMutation<Deliverable, { id: string; input: PublishVersion }>({
+    resource: R.deliverables,
+    mutationFn: ({ id, input }) => data.deliverables.publishVersion(id, input),
+    change: ({ id, input }) => ({
+      type: 'patch',
+      id,
+      patch: input.visibility ? { visibility: input.visibility } : {},
+    }),
+    invalidate: [R.deliverableVersions, R.actionItems, R.activity, R.revisions],
+  })
+}
+
+/** Staff add one revision to a deliverable. The reason is required and logged. */
+export function useGrantBonusRevision() {
+  return useOptimisticMutation<Deliverable, { deliverable_id: string; reason: string; current_limit: number }>({
+    resource: R.deliverables,
+    mutationFn: ({ deliverable_id, reason }) => data.revisions.grantBonus({ deliverable_id, reason }),
+    change: ({ deliverable_id, current_limit }) => ({
+      type: 'patch',
+      id: deliverable_id,
+      patch: { revision_limit: current_limit + 1 },
+    }),
+  })
+}
+
 /** Client approval. The deliverable shows as approved at once and rolls back if the write fails. */
 export function useApproveDeliverable() {
   const queryClient = useQueryClient()
@@ -83,7 +123,7 @@ export function useApproveDeliverable() {
       },
     }),
     // Approving closes the matching "Action Required" item.
-    invalidate: [R.actionItems],
+    invalidate: [R.actionItems, R.activity],
   })
 }
 
@@ -115,7 +155,9 @@ export function useRequestRevision() {
           client_id: '',
           revision_number: (existing?.length ?? 0) + 1,
           on_version: 1,
+          revision_type: input.revision_type ?? 'other',
           description: input.description,
+          attachment_names: input.attachment_names ?? [],
           priority: input.priority ?? 'normal',
           status: 'submitted',
           counts_against_limit: true,
@@ -125,7 +167,7 @@ export function useRequestRevision() {
         },
       }
     },
-    invalidate: [R.deliverables, R.actionItems],
+    invalidate: [R.deliverables, R.actionItems, R.activity],
   })
 }
 

@@ -1,20 +1,25 @@
 import type {
   ActionItem,
+  AiDraft,
   Client,
   ClientAssignment,
   Comment,
   Deliverable,
+  DeliverableVersion,
   Feedback,
   FileRecord,
   Invoice,
   InvoiceItem,
   Lead,
+  LeadActivity,
+  Reminder,
   Milestone,
   Profile,
   Project,
   Revision,
   ServiceRequest,
   SocialMetricDaily,
+  SocialPost,
   Tables,
 } from '../../types/db'
 
@@ -103,6 +108,7 @@ function profiles(): Profile[] {
     role,
     can_approve,
     is_active: true,
+    notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
     created_at: at(-75),
   })
 
@@ -235,6 +241,10 @@ function deliverables(): Deliverable[] {
     approved_by: null,
     approved_at: null,
     approved_via: null,
+    is_final: false,
+    bulk_approvable: false,
+    thumbnail_url: null,
+    visibility: 'client',
     created_at: at(due - 10),
     ...base,
   })
@@ -309,6 +319,7 @@ function deliverables(): Deliverable[] {
         kind: 'web_page',
         status: 'in_review',
         revision_limit: 2,
+        is_final: true,
       },
       4,
     ),
@@ -326,6 +337,36 @@ function deliverables(): Deliverable[] {
       9,
     ),
 
+    // Two more posts in review, flagged so the Approvals inbox can approve them together.
+    row(
+      {
+        id: 'd-agk-7',
+        project_id: 'p-agk-social',
+        client_id: agk,
+        milestone_id: 'm-agk-social-2',
+        title: 'Gym timings story set',
+        kind: 'post',
+        status: 'in_review',
+        bulk_approvable: true,
+        platform: 'instagram',
+      },
+      -2,
+    ),
+    row(
+      {
+        id: 'd-agk-8',
+        project_id: 'p-agk-social',
+        client_id: agk,
+        milestone_id: 'm-agk-social-2',
+        title: 'Diwali membership offer poster',
+        kind: 'post',
+        status: 'in_review',
+        bulk_approvable: true,
+        platform: 'instagram',
+      },
+      5,
+    ),
+
     // Raack Dance Academy: 6 deliverables
     row(
       {
@@ -337,6 +378,7 @@ function deliverables(): Deliverable[] {
         kind: 'image',
         status: 'in_review',
         revision_limit: 2,
+        bulk_approvable: true,
         platform: 'instagram',
       },
       1,
@@ -430,6 +472,7 @@ function revisions(): Revision[] {
     status: Revision['status'],
     requested_by: string,
     submitted: number,
+    type: Revision['revision_type'],
     description: string,
   ): Revision => ({
     id,
@@ -437,7 +480,9 @@ function revisions(): Revision[] {
     client_id,
     revision_number,
     on_version: revision_number,
+    revision_type: type,
     description,
+    attachment_names: [],
     priority: 'normal',
     status,
     counts_against_limit: true,
@@ -447,11 +492,11 @@ function revisions(): Revision[] {
   })
 
   return [
-    row('r-agk-1', 'd-agk-1', agk, 1, 'delivered', agkAdmin, -5, 'Use the new logo at the end and keep the offer text on screen for two more seconds.'),
-    row('r-agk-2', 'd-agk-3', agk, 1, 'submitted', agkAdmin, -1, 'Coach Vignesh has 8 years of experience, not 6. Please swap the second photo.'),
-    row('r-raack-1', 'd-raack-2', raack, 1, 'delivered', raackAdmin, -9, 'Add subtitles in Tamil and English.'),
-    row('r-raack-2', 'd-raack-3', raack, 1, 'delivered', raackAdmin, -7, 'Mention that the trial class is free for children under 12.'),
-    row('r-raack-3', 'd-raack-3', raack, 2, 'in_progress', raackMember, -2, 'Change the batch timing to 5:30 PM on weekdays.'),
+    row('r-agk-1', 'd-agk-1', agk, 1, 'delivered', agkAdmin, -5, 'video_cut', 'Use the new logo at the end and keep the offer text on screen for two more seconds.'),
+    row('r-agk-2', 'd-agk-3', agk, 1, 'submitted', agkAdmin, -1, 'copy_text', 'Coach Vignesh has 8 years of experience, not 6. Please swap the second photo.'),
+    row('r-raack-1', 'd-raack-2', raack, 1, 'delivered', raackAdmin, -9, 'video_cut', 'Add subtitles in Tamil and English.'),
+    row('r-raack-2', 'd-raack-3', raack, 1, 'delivered', raackAdmin, -7, 'copy_text', 'Mention that the trial class is free for children under 12.'),
+    row('r-raack-3', 'd-raack-3', raack, 2, 'in_progress', raackMember, -2, 'copy_text', 'Change the batch timing to 5:30 PM on weekdays.'),
   ]
 }
 
@@ -497,16 +542,43 @@ function files(): FileRecord[] {
     mime_type,
     size_bytes,
     storage_key: `clients/${client_id}/brand_assets/${name}`,
+    url: panel(name, 1),
+    external_url: null,
     version: 1,
     uploaded_by: by,
     visibility: 'client',
     created_at: at(-40),
   })
 
+  const inFolder = (file: FileRecord, folder: FileRecord['folder'], created: number): FileRecord => ({
+    ...file,
+    folder,
+    storage_key: `clients/${file.client_id}/${folder}/${file.name}`,
+    created_at: at(created),
+  })
+
   return [
     row('f-agk-1', agk, 'agk-logo.png', 'image/png', 184_320, agkAdmin),
-    row('f-agk-2', agk, 'agk-brand-colours.pdf', 'application/pdf', 912_000, agkAdmin),
+    // A Google Drive file opens in Drive rather than downloading.
+    {
+      ...row('f-agk-2', agk, 'agk-brand-colours.pdf', 'application/pdf', 912_000, agkAdmin),
+      url: null,
+      external_url: 'https://drive.google.com/file/d/PLACEHOLDER_FILE_ID/view',
+    },
     row('f-raack-1', raack, 'raack-logo.svg', 'image/svg+xml', 24_600, raackAdmin),
+    // Vernex-delivered files for the other Vault tabs. Raack has none, so its tabs show empty states.
+    inFolder(row('f-agk-3', agk, 'diwali-offer-1080x1080.png', 'image/png', 402_000, pm), 'rendered_ads', -9),
+    inFolder(row('f-agk-4', agk, 'trial-week-story.png', 'image/png', 288_000, pm), 'rendered_ads', -4),
+    {
+      ...inFolder(row('f-agk-5', agk, 'social-media-scope-of-work.pdf', 'application/pdf', 1_240_000, pm), 'documents', -38),
+      url: SAMPLE_PDF,
+    },
+    {
+      ...inFolder(row('f-agk-6', agk, 'monthly-report-september.pdf', 'application/pdf', 860_000, pm), 'documents', -8),
+      url: null,
+      external_url: 'https://drive.google.com/file/d/PLACEHOLDER_REPORT_ID/view',
+    },
+    { ...inFolder(row('f-agk-7', agk, 'VX-26-27-0042.pdf', 'application/pdf', 96_000, pm), 'invoices', -20), url: SAMPLE_PDF },
   ]
 }
 
@@ -520,6 +592,8 @@ function serviceRequests(): ServiceRequest[] {
       description: 'Members should be able to pay the monthly fee on the website by UPI.',
       status: 'quoted',
       quote_amount_minor: rupees(18_000),
+      desired_date: day(20),
+      attachment_names: ['payment-flow-sketch.png'],
       requested_by: agkAdmin,
       created_at: at(-6),
     },
@@ -531,6 +605,8 @@ function serviceRequests(): ServiceRequest[] {
       description: null,
       status: 'submitted',
       quote_amount_minor: null,
+      desired_date: null,
+      attachment_names: [],
       requested_by: raackAdmin,
       created_at: at(-1),
     },
@@ -640,10 +716,12 @@ function feedback(): Feedback[] {
       rating: null,
       subject: 'The Navratri posts worked',
       message: 'We got 14 walk-ins from the carousel. Please thank the design team.',
+      private_from_team: true,
       status: 'acknowledged',
       submitted_by: agkAdmin,
       created_at: at(-3),
       responded_at: at(-2),
+      reply: 'Thank you, Arun. I have passed this on to the design team. Keep the walk-ins coming!',
     },
     {
       id: 'fb-raack-1',
@@ -653,19 +731,104 @@ function feedback(): Feedback[] {
       rating: null,
       subject: 'Worried about the annual day timeline',
       message: 'The film has not started and the event is five weeks away. Can we talk?',
+      private_from_team: true,
       status: 'new',
       submitted_by: raackAdmin,
       created_at: at(-1),
       responded_at: null,
+      reply: null,
     },
   ]
 }
 
+// Every person and company below is invented.
 function leads(): Lead[] {
+  const lead = (base: Pick<Lead, 'id' | 'company' | 'stage'> & Partial<Lead>, created: number): Lead => ({
+    country: 'India',
+    city: 'Chennai',
+    industry: null,
+    website: null,
+    instagram: null,
+    linkedin: null,
+    decision_maker: null,
+    role: null,
+    email: null,
+    phone_e164: null,
+    score: null,
+    tier: null,
+    problem: null,
+    opportunity: null,
+    recommended_offer: null,
+    monthly_budget_minor: null,
+    next_action: null,
+    follow_up_date: null,
+    notes: null,
+    converted_client_id: null,
+    created_at: at(created),
+    ...base,
+  })
+
   return [
-    { id: 'l-1', name: 'Prakash M', business: 'Sri Lakshmi Sweets', phone_e164: '+919000000101', source: 'Referral: AGK Fitness', status: 'proposal_sent', created_at: at(-9) },
-    { id: 'l-2', name: 'Farhana B', business: 'Bloom Dental Care', phone_e164: '+919000000102', source: 'Instagram', status: 'contacted', created_at: at(-4) },
-    { id: 'l-3', name: 'Ganesh T', business: 'GT Auto Works', phone_e164: '+919000000103', source: 'Website enquiry', status: 'new', created_at: at(-1) },
+    lead({ id: 'l-1', company: 'GT Auto Works', stage: 'new_lead', industry: 'Automotive', decision_maker: 'Ganesh T', role: 'Owner', phone_e164: '+919000000103', next_action: 'Research their Instagram', follow_up_date: day(1) }, -1),
+    lead({ id: 'l-2', company: 'Bloom Dental Care', stage: 'researched', industry: 'Healthcare', city: 'Coimbatore', decision_maker: 'Farhana B', role: 'Founder', instagram: '@bloomdental', phone_e164: '+919000000102', score: 62, tier: 'B', problem: 'No bookings from social', next_action: 'Write the intro message', follow_up_date: day(0) }, -4),
+    lead({ id: 'l-3', company: 'Sri Lakshmi Sweets', stage: 'qualified', industry: 'Food', decision_maker: 'Prakash M', role: 'Partner', phone_e164: '+919000000101', score: 78, tier: 'A', opportunity: 'Festival season campaign', monthly_budget_minor: rupees(25_000), next_action: 'Send the intro on WhatsApp', follow_up_date: day(-2), notes: 'Referred by AGK Fitness.' }, -9),
+    lead({ id: 'l-4', company: 'Kavya Silks', stage: 'outreach_sent', industry: 'Retail', city: 'Madurai', score: 55, tier: 'B', next_action: 'Follow up if no reply', follow_up_date: day(2) }, -7),
+    lead({ id: 'l-5', company: 'Pixel Pets Clinic', stage: 'responded', industry: 'Veterinary', score: 70, tier: 'B', next_action: 'Book a discovery call', follow_up_date: day(1) }, -12),
+    lead({ id: 'l-6', company: 'Urban Brew Cafe', stage: 'discovery_call', industry: 'Food', score: 81, tier: 'A', recommended_offer: 'Social media retainer', monthly_budget_minor: rupees(18_000), next_action: 'Send the call summary', follow_up_date: day(3) }, -15),
+    lead({ id: 'l-7', company: 'Nila Interiors', stage: 'proposal', industry: 'Interiors', score: 88, tier: 'A', recommended_offer: 'Website plus ads', monthly_budget_minor: rupees(40_000), next_action: 'Chase the proposal reply', follow_up_date: day(-1) }, -21),
+    lead({ id: 'l-8', company: 'Orbit Tuition Centre', stage: 'closed_won', industry: 'Education', email: 'hello@orbittuition.example', score: 90, tier: 'A', recommended_offer: 'Admissions campaign', monthly_budget_minor: rupees(15_000), next_action: 'Convert to client', notes: 'Signed the 3 month retainer.' }, -30),
+    lead({ id: 'l-9', company: 'Zed Gym Equipment', stage: 'closed_lost', industry: 'Retail', score: 40, tier: 'C', notes: 'Went with an in-house hire.' }, -40),
+  ]
+}
+
+function leadActivity(): LeadActivity[] {
+  return leads().map((row) => ({
+    id: `la-${row.id}`,
+    lead_id: row.id,
+    kind: 'created' as const,
+    text: 'Lead added',
+    by: SEED_IDS.pm,
+    created_at: row.created_at,
+  }))
+}
+
+function reminders(): Reminder[] {
+  const row = (id: string, recipient_name: string, phone_e164: string, reason: string, message: string, due: number, status: Reminder['status'] = 'queued'): Reminder => ({
+    id,
+    recipient_name,
+    phone_e164,
+    reason,
+    message,
+    due_at: at(due),
+    status,
+    sent_at: status === 'sent' ? at(due) : null,
+    created_at: at(due - 2),
+  })
+  return [
+    row('rm-1', 'Arun Kumar', '+919000000002', 'Invoice VX/26-27/0044 is overdue', 'Hi Arun, a gentle reminder that invoice VX/26-27/0044 (₹23,600) was due 5 days ago. Could you share when we can expect the payment? Thank you!', -1),
+    row('rm-2', 'Arun Kumar', '+919000000002', 'Membership page design waiting for approval', 'Hi Arun, the membership page design has been waiting for your review for 2 days. It takes two minutes in the portal. Thank you!', 0),
+    row('rm-3', 'Raack admin', '+919000000003', 'Rehearsal footage still missing', 'Hi, we are still waiting for the rehearsal footage for the annual day teaser. Could you upload it to the Vault this week?', 1),
+    row('rm-4', 'Prakash M', '+919000000101', 'Follow up on the intro', 'Hi Prakash, following up on our intro about festival season posts. Shall we find 15 minutes this week?', 2),
+    row('rm-5', 'Arun Kumar', '+919000000002', 'Invoice VX/26-27/0038 paid', 'Hi Arun, thank you for the payment of invoice VX/26-27/0038.', -9, 'sent'),
+  ]
+}
+
+function aiDrafts(): AiDraft[] {
+  const row = (id: string, kind: AiDraft['kind'], subject: string, title: string, body: string, status: AiDraft['status'], created: number): AiDraft => ({
+    id,
+    kind,
+    title,
+    subject,
+    body,
+    status,
+    created_at: at(created),
+    updated_at: at(created),
+  })
+  return [
+    row('ai-1', 'weekly_summary', 'AGK Fitness', 'Weekly summary: AGK Fitness', 'This week we posted 4 reels and stories. Reach grew 12% and 9 new leads came in. The October reel is waiting for your approval, and the membership page design needs a review. Next week: November content calendar and the Diwali offer poster.', 'draft', -1),
+    row('ai-2', 'weekly_summary', 'Raack Dance Academy', 'Weekly summary: Raack Dance Academy', 'This week the admissions poster went into review and 14 enquiries arrived from Instagram. We still need the rehearsal footage for the annual day teaser. Next week: summer camp early bird creative.', 'approved', -2),
+    row('ai-3', 'outreach', 'Kavya Silks', 'Intro message: Kavya Silks', 'Hi, I am from Vernex Digital Marketing in Chennai. I noticed your festive collection posts get strong saves but few enquiries. We help retail brands turn that attention into WhatsApp orders. Could I share two quick ideas for Diwali?', 'draft', -1),
+    row('ai-4', 'outreach', 'Pixel Pets Clinic', 'Follow-up: Pixel Pets Clinic', 'Thanks for replying! Here is what we discussed: a monthly plan with 8 posts, 2 reels and appointment ads. Would Thursday at 4 pm suit for a 20 minute call?', 'sent', -5),
   ]
 }
 
@@ -702,10 +865,117 @@ function socialMetrics(): SocialMetricDaily[] {
         engagements: Math.round(reach * (0.04 + random() * 0.05)),
         profile_visits: Math.round(reach * (0.03 + random() * 0.03)),
         leads: Math.round(random() * 4),
+        ad_spend_minor: rupees(Math.round(250 + random() * 350)),
       })
     }
   }
   return rows
+}
+
+const POST_TITLES: Record<string, string[]> = {
+  [agk]: [
+    'Monday motivation reel',
+    'Trainer spotlight: Karthik',
+    'Free trial week announcement',
+    'Member transformation story',
+    'Five-minute warm-up routine',
+    'New batch timings carousel',
+    'Protein myths busted',
+    'Weekend challenge recap',
+  ],
+  [raack]: [
+    'Annual day teaser reel',
+    'Beginner batch admissions open',
+    'Student performance highlight',
+    'Behind the scenes: rehearsal',
+    'Bharatanatyam basics carousel',
+    'Summer camp early bird offer',
+    'Teacher introduction: Meera',
+    'Workshop photo recap',
+  ],
+}
+
+function socialPosts(): SocialPost[] {
+  const rows: SocialPost[] = []
+  const accounts = [
+    { client_id: agk, base: 2_400, seed: 41 },
+    { client_id: raack, base: 1_600, seed: 67 },
+  ]
+  for (const account of accounts) {
+    const random = series(account.seed)
+    ;(POST_TITLES[account.client_id] ?? []).forEach((title, index) => {
+      const reach = Math.round(account.base * (0.5 + random() * 1.5))
+      rows.push({
+        id: `sp-${account.client_id.slice(2)}-${index + 1}`,
+        client_id: account.client_id,
+        platform: index % 3 === 2 ? 'facebook' : 'instagram',
+        title,
+        published_at: at(-(index * 3 + 1)),
+        reach,
+        engagements: Math.round(reach * (0.04 + random() * 0.06)),
+      })
+    })
+  }
+  return rows
+}
+
+// Placeholder previews: flat SVG panels for images, public sample files for video and PDF, and an
+// unpublished Drive id for the embed. Replace with real storage URLs when Supabase Storage lands.
+const SAMPLE_VIDEO = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
+const SAMPLE_PDF = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
+const SAMPLE_DRIVE = 'https://drive.google.com/file/d/PLACEHOLDER_FILE_ID/preview'
+
+// The three hex values inside the SVG below are the paper, ink and signal tokens from tokens.css.
+// An SVG used as an image cannot read CSS variables, so the values are repeated here; the file is
+// mock data and goes away when real storage URLs arrive.
+function panel(title: string, version: number): string {
+  const safe = title.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">' +
+    '<rect width="1080" height="1080" fill="#FAF7F2"/><rect x="60" y="60" width="960" height="960" fill="none" stroke="#1C1915" stroke-width="4"/>' +
+    '<text x="540" y="520" font-family="serif" font-size="64" font-weight="600" text-anchor="middle" fill="#1C1915">' + safe + '</text>' +
+    '<text x="540" y="620" font-family="monospace" font-size="40" text-anchor="middle" fill="#C2410C">v' + version + '</text></svg>'
+  return 'data:image/svg+xml,' + encodeURIComponent(svg)
+}
+
+function previewFor(row: Deliverable, version: number): Pick<DeliverableVersion, 'preview_kind' | 'preview_url'> {
+  switch (row.kind) {
+    case 'video':
+      return { preview_kind: 'video', preview_url: SAMPLE_VIDEO }
+    case 'document':
+    case 'report':
+      return { preview_kind: 'pdf', preview_url: SAMPLE_PDF }
+    case 'web_page':
+    case 'software_build':
+      return { preview_kind: 'drive', preview_url: SAMPLE_DRIVE }
+    default:
+      return { preview_kind: 'image', preview_url: panel(row.title, version) }
+  }
+}
+
+/** One version per number up to the current one, so every deliverable has something to preview. */
+function deliverableVersions(rows: Deliverable[]): DeliverableVersion[] {
+  return rows.flatMap((row) =>
+    Array.from({ length: row.current_version }, (_, index): DeliverableVersion => {
+      const version = index + 1
+      return {
+        id: row.id + '-v' + version,
+        deliverable_id: row.id,
+        client_id: row.client_id,
+        version,
+        ...previewFor(row, version),
+        created_at: at(-20 + version * 4),
+      }
+    }),
+  )
+}
+
+const IMAGE_KINDS: Deliverable['kind'][] = ['image', 'post', 'ad_creative', 'design']
+
+function withThumbnails(rows: Deliverable[]): Deliverable[] {
+  return rows.map((row) =>
+    IMAGE_KINDS.includes(row.kind) ? { ...row, thumbnail_url: panel(row.title, row.current_version) } : row,
+  )
 }
 
 export type MockDatabase = { [K in keyof Tables]: Tables[K][] }
@@ -718,8 +988,10 @@ export function createSeed(): MockDatabase {
     client_assignments: clientAssignments(),
     projects: projects(),
     milestones: milestones(),
-    deliverables: deliverables(),
+    deliverables: withThumbnails(deliverables()),
+    deliverable_versions: deliverableVersions(deliverables()),
     revisions: revisions(),
+    revision_grants: [],
     comments: comments(),
     files: files(),
     service_requests: serviceRequests(),
@@ -728,6 +1000,10 @@ export function createSeed(): MockDatabase {
     action_items: actionItems(),
     feedback: feedback(),
     social_metrics_daily: socialMetrics(),
+    social_posts: socialPosts(),
     leads: leads(),
+    lead_activity: leadActivity(),
+    reminders: reminders(),
+    ai_drafts: aiDrafts(),
   }
 }

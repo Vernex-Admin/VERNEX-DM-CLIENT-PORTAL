@@ -126,8 +126,48 @@ export type FounderCategory = (typeof FOUNDER_CATEGORIES)[number]
 export const FEEDBACK_STATUSES = ['new', 'acknowledged', 'in_progress', 'resolved'] as const
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number]
 
-export const LEAD_STATUSES = ['new', 'contacted', 'proposal_sent', 'won', 'lost'] as const
-export type LeadStatus = (typeof LEAD_STATUSES)[number]
+/** The pipeline columns, left to right. */
+export const LEAD_STAGES = [
+  'new_lead',
+  'researched',
+  'qualified',
+  'outreach_sent',
+  'responded',
+  'discovery_call',
+  'qualified_opportunity',
+  'proposal',
+  'negotiation',
+  'closed_won',
+  'closed_lost',
+] as const
+export type LeadStage = (typeof LEAD_STAGES)[number]
+
+export const LEAD_TIERS = ['A', 'B', 'C'] as const
+export type LeadTier = (typeof LEAD_TIERS)[number]
+
+export const REMINDER_STATUSES = ['queued', 'sent', 'skipped'] as const
+export type ReminderStatus = (typeof REMINDER_STATUSES)[number]
+
+export const AI_DRAFT_KINDS = ['weekly_summary', 'outreach'] as const
+export type AiDraftKind = (typeof AI_DRAFT_KINDS)[number]
+
+export const AI_DRAFT_STATUSES = ['draft', 'approved', 'sent'] as const
+export type AiDraftStatus = (typeof AI_DRAFT_STATUSES)[number]
+
+export const REVISION_TYPES = [
+  'copy_text',
+  'visual_design',
+  'video_cut',
+  'audio_music',
+  'functionality',
+  'bug_fix',
+  'content_data',
+  'other',
+] as const
+export type RevisionType = (typeof REVISION_TYPES)[number]
+
+export const PREVIEW_KINDS = ['image', 'pdf', 'video', 'drive'] as const
+export type PreviewKind = (typeof PREVIEW_KINDS)[number]
 
 export type RevisionPriority = 'normal' | 'urgent'
 export type ApprovedVia = 'portal' | 'offline_proxy'
@@ -165,7 +205,18 @@ export type Profile = {
   /** Only meaningful for `client_member`: set by the client admin. */
   can_approve: boolean
   is_active: boolean
+  notification_prefs: NotificationPrefs
   created_at: Timestamp
+}
+
+/** Which nudges a person wants, and where. */
+export type NotificationPrefs = {
+  email: boolean
+  whatsapp: boolean
+  approvals: boolean
+  comments: boolean
+  invoices: boolean
+  weekly_report: boolean
 }
 
 /** Which Vernex staff serve which client. The founder sees every client regardless. */
@@ -220,6 +271,24 @@ export type Deliverable = {
   approved_by: UUID | null
   approved_at: Timestamp | null
   approved_via: ApprovedVia | null
+  /** Final-stage work: approving it asks for an extra confirmation. */
+  is_final: boolean
+  /** Posts and creatives that may be approved together from the Approvals inbox. */
+  bulk_approvable: boolean
+  thumbnail_url: string | null
+  /** `internal` work is Vernex's own: a client never sees it. New work starts internal. */
+  visibility: Visibility
+  created_at: Timestamp
+}
+
+/** One uploaded version of a deliverable, with what the reviewer should see. */
+export type DeliverableVersion = {
+  id: UUID
+  deliverable_id: UUID
+  client_id: UUID
+  version: number
+  preview_kind: PreviewKind
+  preview_url: string
   created_at: Timestamp
 }
 
@@ -229,13 +298,26 @@ export type Revision = {
   client_id: UUID
   revision_number: number
   on_version: number
+  revision_type: RevisionType
   description: string
+  /** File names only: the mock keeps no file bodies. */
+  attachment_names: string[]
   priority: RevisionPriority
   status: RevisionStatus
   counts_against_limit: boolean
   requested_by: UUID
   submitted_at: Timestamp
   delivered_at: Timestamp | null
+}
+
+/** A logged extra revision granted by Vernex staff, always with a reason. */
+export type RevisionGrant = {
+  id: UUID
+  deliverable_id: UUID
+  client_id: UUID
+  reason: string
+  granted_by: UUID
+  created_at: Timestamp
 }
 
 /** `visibility: 'internal'` comments are staff-only and never reach a client. */
@@ -262,6 +344,10 @@ export type FileRecord = {
   mime_type: string | null
   size_bytes: number | null
   storage_key: string
+  /** Where to download it. Null until storage is connected. */
+  url: string | null
+  /** A Google Drive link; the file opens in Drive rather than downloading. */
+  external_url: string | null
   version: number
   uploaded_by: UUID | null
   visibility: Visibility
@@ -276,6 +362,9 @@ export type ServiceRequest = {
   description: string | null
   status: ServiceRequestStatus
   quote_amount_minor: Minor | null
+  desired_date: DateString | null
+  /** File names only: the mock keeps no file bodies. */
+  attachment_names: string[]
   requested_by: UUID | null
   created_at: Timestamp
 }
@@ -335,10 +424,14 @@ export type Feedback = {
   rating: number | null
   subject: string | null
   message: string | null
+  /** Set by the sender: keep this from the project team. */
+  private_from_team: boolean
   status: FeedbackStatus
   submitted_by: UUID
   created_at: Timestamp
   responded_at: Timestamp | null
+  /** The founder's answer, shown back to the sender. */
+  reply: string | null
 }
 
 /** One row per client, platform and day. Primary key: (client_id, platform, date). */
@@ -353,17 +446,85 @@ export type SocialMetricDaily = {
   engagements: number
   profile_visits: number
   leads: number
+  ad_spend_minor: Minor
+}
+
+/** A published post and how far it reached. Feeds the Performance page's top posts. */
+export type SocialPost = {
+  id: UUID
+  client_id: UUID
+  platform: string
+  title: string
+  published_at: Timestamp
+  reach: number
+  engagements: number
 }
 
 /** Vernex's own sales pipeline. Staff-only: clients never see leads. */
 export type Lead = {
   id: UUID
-  name: string
-  business: string | null
+  stage: LeadStage
+  company: string
+  country: string | null
+  city: string | null
+  industry: string | null
+  website: string | null
+  instagram: string | null
+  linkedin: string | null
+  decision_maker: string | null
+  role: string | null
+  email: string | null
   phone_e164: string | null
-  source: string | null
-  status: LeadStatus
+  /** 0 to 100. */
+  score: number | null
+  tier: LeadTier | null
+  problem: string | null
+  opportunity: string | null
+  recommended_offer: string | null
+  monthly_budget_minor: Minor | null
+  next_action: string | null
+  follow_up_date: DateString | null
+  notes: string | null
+  /** Set once a Closed Won lead has been turned into a client. */
+  converted_client_id: UUID | null
   created_at: Timestamp
+}
+
+/** One line of a lead's history. */
+export type LeadActivity = {
+  id: UUID
+  lead_id: UUID
+  kind: 'created' | 'stage' | 'edit' | 'converted' | 'imported'
+  text: string
+  by: UUID | null
+  created_at: Timestamp
+}
+
+/** A WhatsApp nudge waiting to be sent by a person (the portal never sends it itself). */
+export type Reminder = {
+  id: UUID
+  recipient_name: string
+  phone_e164: string
+  message: string
+  /** Why it exists, e.g. "Invoice VX/26-27/0046 due". */
+  reason: string
+  due_at: Timestamp
+  status: ReminderStatus
+  sent_at: Timestamp | null
+  created_at: Timestamp
+}
+
+/** Mock AI text awaiting a person's edit and approval. */
+export type AiDraft = {
+  id: UUID
+  kind: AiDraftKind
+  title: string
+  /** Who it is about: a client for a weekly summary, a lead for outreach. */
+  subject: string
+  body: string
+  status: AiDraftStatus
+  created_at: Timestamp
+  updated_at: Timestamp
 }
 
 export type Tables = {
@@ -373,7 +534,9 @@ export type Tables = {
   projects: Project
   milestones: Milestone
   deliverables: Deliverable
+  deliverable_versions: DeliverableVersion
   revisions: Revision
+  revision_grants: RevisionGrant
   comments: Comment
   files: FileRecord
   service_requests: ServiceRequest
@@ -382,7 +545,11 @@ export type Tables = {
   action_items: ActionItem
   feedback: Feedback
   social_metrics_daily: SocialMetricDaily
+  social_posts: SocialPost
   leads: Lead
+  lead_activity: LeadActivity
+  reminders: Reminder
+  ai_drafts: AiDraft
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +570,7 @@ export type ClientInsert = Insert<
   Client,
   'logo_url' | 'industry' | 'city' | 'gstin' | 'billing_email' | 'currency' | 'retainer_minor' | 'retainer_months'
 >
-export type ProfileInsert = Insert<Profile, 'phone_e164' | 'avatar_url' | 'can_approve' | 'is_active'>
+export type ProfileInsert = Insert<Profile, 'phone_e164' | 'avatar_url' | 'can_approve' | 'is_active' | 'notification_prefs'>
 export type ProjectInsert = Insert<
   Project,
   'description' | 'health' | 'health_reason' | 'start_date' | 'target_end_date' | 'default_revision_limit'
@@ -413,7 +580,21 @@ export type MilestoneInsert = Insert<
   'client_id' | 'position' | 'due_date' | 'status' | 'completed_at' | 'invoice_trigger'
 >
 export type DeliverableInsert = Pick<Deliverable, 'project_id' | 'title' | 'kind'> &
-  Partial<Pick<Deliverable, 'milestone_id' | 'status' | 'revision_limit' | 'due_date' | 'platform' | 'caption'>>
+  Partial<
+    Pick<
+      Deliverable,
+      | 'milestone_id'
+      | 'status'
+      | 'revision_limit'
+      | 'due_date'
+      | 'platform'
+      | 'caption'
+      | 'is_final'
+      | 'bulk_approvable'
+      | 'thumbnail_url'
+      | 'visibility'
+    >
+  >
 export type InvoiceItemInsert = Pick<InvoiceItem, 'description' | 'unit_price_minor'> &
   Partial<Pick<InvoiceItem, 'sac_code' | 'quantity'>>
 export type InvoiceInsert = Pick<Invoice, 'client_id' | 'issue_date' | 'due_date'> &

@@ -4,4 +4,4 @@ export const controlClasses =
   'transition-colors duration-150 enabled:hover:border-ink-muted aria-invalid:border-bad ' +
   'disabled:cursor-not-allowed disabled:bg-paper disabled:text-ink-muted sm:text-[1rem]'
 
-export const controlHeight = 'min-h-[44px] sm:min-h-[36px]'
+export const controlHeight = 'min-h-[44px] lg:min-h-[36px]'

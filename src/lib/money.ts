@@ -27,3 +27,14 @@ const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR',
 export function formatINR(minor: Minor): string {
   return inr.format(minor / 100)
 }
+
+/** Rupees typed by a person (`"15000"`, `"1,500.50"`) to paise. NaN when it is not a number. */
+export function toMinor(rupees: string): Minor {
+  const value = Number(rupees.replace(/[,\s]/g, ''))
+  return Number.isFinite(value) && rupees.trim() !== '' ? Math.round(value * 100) : Number.NaN
+}
+
+/** Paise to the plain rupee number an input shows: 1500050 becomes "15000.5". */
+export function toRupeesInput(minor: Minor): string {
+  return String(minor / 100)
+}

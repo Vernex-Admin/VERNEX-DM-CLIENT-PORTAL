@@ -1,8 +1,18 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
-import type { Client, ClientInsert, Profile, ProfileInsert, Update } from '../../types/db'
+import type { MyProfilePatch } from '../../data'
+import type { Client, ClientAssignment, ClientInsert, NotificationPrefs, Profile, ProfileInsert, Update } from '../../types/db'
 import { keys, R } from './keys'
 import { nowIso, tempId, useOptimisticMutation } from './optimistic'
+
+const DEFAULT_PREFS: NotificationPrefs = {
+  email: true,
+  whatsapp: true,
+  approvals: true,
+  comments: true,
+  invoices: true,
+  weekly_report: false,
+}
 
 export function useClients() {
   return useQuery({ queryKey: keys.list(R.clients), queryFn: () => data.clients.list() })
@@ -76,6 +86,38 @@ export function useAccountLead(clientId: string | undefined) {
   })
 }
 
+/** Staff only: the Vernex people an account lead can be chosen from. */
+export function useStaff() {
+  return useQuery({ queryKey: keys.list(R.staff), queryFn: () => data.profiles.listStaff() })
+}
+
+/** Staff only: the account lead of every visible client. */
+export function useAccountLeads() {
+  return useQuery({ queryKey: keys.list(R.accountLead), queryFn: () => data.profiles.listAccountLeads() })
+}
+
+export function useSetAccountLead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ clientId, userId }: { clientId: string; userId: string }) =>
+      data.profiles.setAccountLead(clientId, userId),
+    onMutate: async ({ clientId, userId }) => {
+      const key = keys.list(R.accountLead)
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<ClientAssignment[]>(key)
+      queryClient.setQueryData<ClientAssignment[]>(key, (rows = []) => [
+        ...rows.filter((row) => row.client_id !== clientId),
+        { client_id: clientId, user_id: userId, is_account_lead: true },
+      ])
+      return { key, previous }
+    },
+    onError: (_error, _vars, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.all(R.accountLead) }),
+  })
+}
+
 export function useCreateClientUser() {
   return useOptimisticMutation<Profile, ProfileInsert & { client_id: string }>({
     resource: R.clientUsers,
@@ -88,6 +130,7 @@ export function useCreateClientUser() {
         can_approve: input.role === 'client_admin',
         is_active: true,
         ...input,
+        notification_prefs: input.notification_prefs ?? DEFAULT_PREFS,
         id: tempId(),
         created_at: nowIso(),
       },
@@ -102,6 +145,16 @@ export function useUpdateClientUser() {
     change: ({ id, patch }) => ({ type: 'patch', id, patch }),
     // Editing your own profile, e.g. can_approve, changes what useCan() answers.
     invalidate: [R.session],
+  })
+}
+
+/** The signed-in user edits their own name, WhatsApp number and notification choices. */
+export function useUpdateMe() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: MyProfilePatch) => data.profiles.updateMe(patch),
+    onSettled: () =>
+      Promise.all([R.session, R.clientUsers, R.accountLead].map((key) => queryClient.invalidateQueries({ queryKey: keys.all(key) }))),
   })
 }
 

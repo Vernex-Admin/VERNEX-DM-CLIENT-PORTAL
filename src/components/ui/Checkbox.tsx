@@ -12,7 +12,7 @@ export function Checkbox({ label, description, className, ...props }: CheckboxPr
   return (
     <label
       className={cn(
-        'flex min-h-[44px] cursor-pointer items-start gap-2.5 py-3 sm:min-h-0 sm:py-0',
+        'flex min-h-[44px] cursor-pointer items-start gap-2.5 py-3 lg:min-h-0 lg:py-0',
         'has-disabled:cursor-not-allowed has-disabled:opacity-50',
         className,
       )}

@@ -1,5 +1,6 @@
 // The only data entry point for screens. Do not import src/data from a page or component.
 export * from './activity'
+export * from './admin'
 export * from './billing'
 export * from './clients'
 export * from './deliverables'
@@ -19,7 +20,13 @@ export type {
   DeliverableFilter,
   FileFilter,
   FounderMessage,
+  InvoicePatch,
+  LeadInsert,
+  PublishVersion,
   RevisionRequest,
   ServiceRequestSubmission,
   SocialMetricsFilter,
+  TopPostsFilter,
+  MyProfilePatch,
 } from '../../data'
+export type { ActivityEvent, ActivityKind } from '../../data'
