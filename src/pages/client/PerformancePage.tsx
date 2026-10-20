@@ -36,7 +36,11 @@ export default function PerformancePage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[1.6rem] leading-tight">Performance</h1>
-          {synced.data && <p className="text-sm text-ink-muted">Last synced {relativeTime(synced.data)}</p>}
+          {synced.isSuccess && (
+            <p className="text-sm text-ink-muted">
+              {synced.data ? `Last synced ${relativeTime(synced.data)}` : 'No data synced yet'}
+            </p>
+          )}
         </div>
         <div role="group" aria-label="Date range" className="flex gap-1">
           {RANGES.map((range) => (

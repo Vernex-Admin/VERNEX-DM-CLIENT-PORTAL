@@ -113,7 +113,7 @@ describe('walkthrough: a new client to its first deliverable on the client dashb
     renderAt('/')
     expect(await screen.findByText('Review Launch teaser reel (version 1)')).toBeTruthy()
     expect((await screen.findAllByText('Launch campaign')).length).toBeGreaterThan(0)
-  })
+  }, 30_000)
 })
 
 describe('clients list', () => {

@@ -23,8 +23,12 @@ export type Resource =
   | 'lead'
   | 'reminder'
   | 'ai_draft'
+  | 'onboarding'
+  | 'document'
+  | 'template'
+  | 'staff'
 
-export type Action = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'request_revision' | 'upload'
+export type Action = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'request_revision' | 'upload' | 'submit'
 
 export type Permission = `${Resource}:${Action}`
 
@@ -33,8 +37,11 @@ function crud<R extends Resource>(resource: R) {
 }
 
 // Vernex admin roles: full control of client work. They never approve on a client's behalf.
+// Deleting a client is founder-only.
 const STAFF: readonly Permission[] = [
-  ...crud('client'),
+  'client:view',
+  'client:create',
+  'client:edit',
   ...crud('client_user'),
   ...crud('project'),
   ...crud('milestone'),
@@ -45,6 +52,10 @@ const STAFF: readonly Permission[] = [
   ...crud('lead'),
   ...crud('reminder'),
   ...crud('ai_draft'),
+  ...crud('onboarding'),
+  'onboarding:submit',
+  ...crud('document'),
+  ...crud('template'),
   'revision:view',
   'revision:edit',
   'brand_asset:view',
@@ -55,10 +66,11 @@ const STAFF: readonly Permission[] = [
   'internal_comment:view',
   'internal_comment:create',
   'social_metrics:view',
+  'social_metrics:create',
 ]
 
-// Client roles: view their own client's data, plus the six things a client can do.
-// Deliberately absent: internal_comment, lead, founder_inbox, and every create/edit/delete
+// Client roles: view their own client's data, plus client actions.
+// Deliberately absent: internal_comment, lead, founder_inbox, templates, and every create/edit/delete
 // on clients, client users, projects, milestones, deliverables and invoices.
 const CLIENT: readonly Permission[] = [
   'client:view',
@@ -73,6 +85,9 @@ const CLIENT: readonly Permission[] = [
   'brand_asset:view',
   'comment:view',
   'social_metrics:view',
+  'onboarding:view',
+  'onboarding:submit',
+  'document:view',
 
   'deliverable:approve', // client_member: only with can_approve (see can())
   'deliverable:request_revision', // client_member: only with can_approve
@@ -83,8 +98,8 @@ const CLIENT: readonly Permission[] = [
 ]
 
 export const POLICY: Record<UserRole, readonly Permission[]> = {
-  // Only the founder reads the Founder Box; the PM sees none of it.
-  vernex_founder: [...STAFF, 'founder_inbox:view', 'founder_inbox:edit'],
+  // Only the founder reads the Founder Box and deletes clients; the PM sees none of it.
+  vernex_founder: [...STAFF, 'client:delete', ...crud('staff'), 'staff:view', 'founder_inbox:view', 'founder_inbox:edit'],
   vernex_pm: STAFF,
   client_admin: CLIENT,
   client_member: CLIENT,

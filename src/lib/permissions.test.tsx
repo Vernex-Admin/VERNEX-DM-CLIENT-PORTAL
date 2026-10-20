@@ -37,7 +37,9 @@ describe('admin roles', () => {
   describe.each(adminRoles)('%s', (_role, profile) => {
     it.each(adminManaged)('views, creates, edits and deletes %s', (resource) => {
       for (const action of ['view', ...writes] as Action[]) {
-        expect(can(profile, resource, action), `${resource}:${action}`).toBe(true)
+        // Deleting a client is founder-only.
+        const expected = !(resource === 'client' && action === 'delete' && profile.role !== 'vernex_founder')
+        expect(can(profile, resource, action), `${resource}:${action}`).toBe(expected)
       }
     })
 

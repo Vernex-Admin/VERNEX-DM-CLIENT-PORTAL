@@ -41,6 +41,8 @@ export function useCreateClient() {
         currency: 'INR',
         retainer_minor: null,
         retainer_months: null,
+        service_type: input.service_type ?? null,
+        onboarding_answers: input.onboarding_answers ?? null,
         ...input,
         id: tempId(),
         created_at: nowIso(),

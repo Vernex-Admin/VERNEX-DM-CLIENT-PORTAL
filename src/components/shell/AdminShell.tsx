@@ -1,4 +1,4 @@
-import { Inbox, Send, Sparkles, SquareKanban, Users } from 'lucide-react'
+import { FileCheck, FileText, Inbox, Receipt, Send, Sparkles, SquareKanban, UserCog, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useSearchParams } from 'react-router'
 import { cn } from '../../lib/cn'
@@ -14,12 +14,18 @@ type NavItem = { to: string; label: string; icon: LucideIcon; show: boolean }
 export function AdminShell() {
   const canSeeLeads = useCan('lead', 'view')
   const canSeeInbox = useCan('founder_inbox', 'view')
+  const canSeeTemplates = useCan('template', 'view')
+  const canSeeStaff = useCan('staff', 'view')
   const { data: clients = [] } = useClients()
   const [params, setParams] = useSearchParams()
 
   const items: NavItem[] = [
     { to: '/admin/clients', label: 'Clients', icon: Users, show: true },
     { to: '/admin/pipeline', label: 'Pipeline', icon: SquareKanban, show: canSeeLeads },
+    { to: '/admin/agreement', label: 'Agreement', icon: FileCheck, show: true },
+    { to: '/admin/invoice', label: 'Invoice', icon: Receipt, show: true },
+    { to: '/admin/templates', label: 'Templates', icon: FileText, show: canSeeTemplates },
+    { to: '/admin/staff', label: 'Staff', icon: UserCog, show: canSeeStaff },
     { to: '/admin/outbox', label: 'Outbox', icon: Send, show: true },
     { to: '/admin/founder-inbox', label: 'Founder Inbox', icon: Inbox, show: canSeeInbox },
     { to: '/admin/ai-drafts', label: 'AI Drafts', icon: Sparkles, show: true },

@@ -323,7 +323,7 @@ function PublishDrawer({ deliverable, onClose }: { deliverable: Deliverable; onC
 
   async function submit() {
     setError(undefined)
-    let input: { preview_kind: 'image' | 'pdf' | 'video' | 'drive'; preview_url: string }
+    let input: { preview_kind: 'image' | 'pdf' | 'video' | 'drive'; preview_url: string; file?: File }
     if (values.source === 'drive') {
       const url = toDrivePreview(values.link)
       if (!url) return setError('Paste a Google Drive or Google Docs share link.')
@@ -332,7 +332,7 @@ function PublishDrawer({ deliverable, onClose }: { deliverable: Deliverable; onC
       if (!file) return setError('Choose a file to upload.')
       const kind = previewKindOf(file.type)
       if (!kind) return setError('Upload an image, a PDF or a video. For anything else, use a Google Drive link.')
-      input = { preview_kind: kind, preview_url: URL.createObjectURL(file) }
+      input = { preview_kind: kind, preview_url: URL.createObjectURL(file), file }
     }
     if (!can) return
     try {

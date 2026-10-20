@@ -12,9 +12,21 @@ import type {
   LeadStage,
   NotificationPrefs,
   Profile,
+  ClientDocument,
+  OnboardingItem,
+  ServiceType,
 } from '../../types/db'
 import { DataError } from '../types'
-import type { ActivityEvent, AuthSession, DataLayer, LeadInsert } from '../types'
+import type {
+  ActivityEvent,
+  AuthSession,
+  DataLayer,
+  LeadInsert,
+  DocumentInsert,
+  DocumentPatch,
+  OnboardingItemPatch,
+  TemplatePatch,
+} from '../types'
 import {
   currentProfile,
   db,
@@ -34,7 +46,7 @@ import {
 const isClientUser = (profile: Profile) => profile.role === 'client_admin' || profile.role === 'client_member'
 
 function insertClient(input: ClientInsert, profile: Profile): Client {
-  const client = {
+  const client: Client = {
     logo_url: null,
     industry: null,
     city: null,
@@ -44,6 +56,8 @@ function insertClient(input: ClientInsert, profile: Profile): Client {
     retainer_minor: null,
     retainer_months: null,
     ...input,
+    service_type: input.service_type ?? null,
+    onboarding_answers: input.onboarding_answers ?? null,
     id: newId(),
     created_at: nowIso(),
   }
@@ -271,6 +285,24 @@ export const mockData: DataLayer = {
         const profile = currentProfile()
         return profile ? toSession(profile) : null
       }),
+    signInWithPassword: ({ email, password }) =>
+      run(() => {
+        const address = email.trim().toLowerCase()
+        if (address === 'admin@vernex.in' && (password === 'admin@123' || !password)) {
+          const founderProfile = db.profiles.find((p) => p.role === 'vernex_founder')
+          if (founderProfile) {
+            founderProfile.email = 'admin@vernex.in'
+            setCurrentProfileId(founderProfile.id)
+            return toSession(founderProfile)
+          }
+        }
+        const profile = profileByEmail(email)
+        if (!profile) {
+          throw new DataError('not_found', 'Invalid email or password.')
+        }
+        setCurrentProfileId(profile.id)
+        return toSession(profile)
+      }),
     signInWithOtp: ({ email }) =>
       run(() => {
         if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new DataError('invalid', 'Enter a valid email address.')
@@ -292,6 +324,7 @@ export const mockData: DataLayer = {
       run(() => {
         setCurrentProfileId(null)
       }),
+    onAuthChange: () => () => {},
   },
 
   session: {
@@ -401,6 +434,64 @@ export const mockData: DataLayer = {
           db.client_assignments.push(assignment)
         }
         return assignment
+      }),
+    createStaff: ({ email, full_name }) =>
+      run(() => {
+        guard('staff', 'create')
+        if (!full_name.trim()) throw new DataError('invalid', 'Give them a name.')
+        if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new DataError('invalid', 'Enter a valid email address.')
+        if (db.profiles.some((row) => normaliseEmail(row.email) === normaliseEmail(email))) {
+          throw new DataError('invalid', 'Someone already uses that email address.')
+        }
+        const profile: Profile = {
+          id: newId(),
+          client_id: null,
+          email: normaliseEmail(email),
+          full_name: full_name.trim(),
+          phone_e164: null,
+          avatar_url: null,
+          role: 'vernex_pm',
+          can_approve: false,
+          is_active: true,
+          notification_prefs: { ...DEFAULT_PREFS },
+          created_at: nowIso(),
+        }
+        db.profiles.push(profile)
+        return profile
+      }),
+    setActive: (id, isActive) =>
+      run(() => {
+        guard('staff', 'edit')
+        const profile = db.profiles.find((row) => row.id === id)
+        if (!profile || profile.client_id !== null) throw new DataError('not_found', `No staff member ${id}`)
+        if (profile.id === me().id) throw new DataError('invalid', 'You cannot deactivate yourself.')
+        profile.is_active = isActive
+        return profile
+      }),
+    listAssignments: () =>
+      run(() => {
+        guard('staff', 'view')
+        return db.client_assignments
+      }),
+    assignToClient: (clientId, userId) =>
+      run(() => {
+        guard('staff', 'edit')
+        const person = db.profiles.find((row) => row.id === userId)
+        if (!person || person.client_id !== null) throw new DataError('invalid', 'Choose a Vernex team member.')
+        const existing = db.client_assignments.find((row) => row.client_id === clientId && row.user_id === userId)
+        if (existing) return existing
+        const assignment: ClientAssignment = { client_id: clientId, user_id: userId, is_account_lead: false }
+        db.client_assignments.push(assignment)
+        return assignment
+      }),
+    unassignFromClient: (clientId, userId) =>
+      run(() => {
+        guard('staff', 'edit')
+        const existing = db.client_assignments.find((row) => row.client_id === clientId && row.user_id === userId)
+        if (existing?.is_account_lead) {
+          throw new DataError('invalid', 'Choose another account lead for this client first.')
+        }
+        removeWhere(db.client_assignments, (row) => row.client_id === clientId && row.user_id === userId)
       }),
     createClientUser: (input) =>
       run(() => {
@@ -944,6 +1035,29 @@ export const mockData: DataLayer = {
         db.files.push(file)
         return file
       }),
+    addLink: (input) =>
+      run(() => {
+        const profile = guard('brand_asset', 'upload', input.client_id)
+        const file = {
+          id: newId(),
+          client_id: input.client_id,
+          project_id: null,
+          deliverable_id: null,
+          folder: input.folder,
+          name: input.name,
+          mime_type: null,
+          size_bytes: null,
+          storage_key: '',
+          url: null,
+          external_url: input.external_url,
+          version: 1,
+          uploaded_by: profile.id,
+          visibility: input.visibility ?? ('client' as const),
+          created_at: nowIso(),
+        }
+        db.files.push(file)
+        return file
+      }),
     remove: (id) =>
       run(() => {
         writable(db.files, id, 'brand_asset', 'delete')
@@ -1027,6 +1141,19 @@ export const mockData: DataLayer = {
       run(() => {
         guard('social_metrics', 'view', filter.client_id)
         return new Date(SYNCED_AT).toISOString()
+      }),
+    importDaily: (rows) =>
+      run(() => {
+        for (const row of rows) guard('social_metrics', 'create', row.client_id)
+        for (const row of rows) {
+          const existing = db.social_metrics_daily.find(
+            (candidate) =>
+              candidate.client_id === row.client_id && candidate.platform === row.platform && candidate.date === row.date,
+          )
+          if (existing) Object.assign(existing, row)
+          else db.social_metrics_daily.push({ ...row, project_id: null })
+        }
+        return rows.length
       }),
   },
 
@@ -1175,6 +1302,204 @@ export const mockData: DataLayer = {
         draft.status = 'sent'
         draft.updated_at = nowIso()
         return draft
+      }),
+  },
+
+  onboarding: {
+    list: (clientId: string) =>
+      run(() => {
+        const profile = guard('onboarding', 'view', clientId)
+        let items = db.onboarding_items.filter((item) => item.client_id === clientId)
+        if (isClientUser(profile)) {
+          items = items.filter((item) => item.owner === 'client')
+        }
+        return [...items].sort((a, b) => a.position - b.position)
+      }),
+
+    generate: (clientId: string, service: ServiceType) =>
+      run(() => {
+        guard('onboarding', 'create', clientId)
+        if (!['social', 'website', 'both'].includes(service)) {
+          throw new DataError('invalid', 'Choose social, website or both.')
+        }
+        const client = db.clients.find((c) => c.id === clientId)
+        if (!client) throw new DataError('not_found', `No client ${clientId}`)
+        client.service_type = service
+
+        removeWhere(db.onboarding_items, (item) => item.client_id === clientId)
+
+        const matching = db.onboarding_item_templates.filter(
+          (t) =>
+            t.service === 'common' ||
+            t.service === service ||
+            (service === 'both' && (t.service === 'social' || t.service === 'website')),
+        )
+
+        const rank = (s: string) => (s === 'common' ? 0 : s === 'social' ? 1 : 2)
+        matching.sort((a, b) => rank(a.service) - rank(b.service) || a.position - b.position)
+
+        const today = new Date()
+        const addDays = (days: number) => {
+          const d = new Date(today.getTime() + days * 86_400_000)
+          return d.toISOString().slice(0, 10)
+        }
+
+        const created: OnboardingItem[] = matching.map((t, idx) => ({
+          id: newId(),
+          client_id: clientId,
+          service: t.service,
+          stage: t.stage,
+          title: t.title,
+          owner: t.owner,
+          status: 'todo',
+          position: idx + 1,
+          due_date: addDays(t.due_offset_days),
+          completed_at: null,
+          created_at: nowIso(),
+        }))
+
+        db.onboarding_items.push(...created)
+        return created
+      }),
+
+    updateItem: (id: string, patch: OnboardingItemPatch) =>
+      run(() => {
+        const item = db.onboarding_items.find((i) => i.id === id)
+        if (!item) throw new DataError('not_found', `No onboarding item ${id}`)
+        const profile = guard('onboarding', 'edit', item.client_id)
+        if (isClientUser(profile) && item.owner !== 'client') {
+          throw new DataError('forbidden', 'Clients can only update client items.')
+        }
+        if (patch.status !== undefined) {
+          item.status = patch.status
+          item.completed_at = patch.status === 'done' ? (item.completed_at ?? nowIso()) : null
+        }
+        if (patch.due_date !== undefined) item.due_date = patch.due_date
+        if (patch.title !== undefined) item.title = patch.title
+        return item
+      }),
+
+    submit: (answers: Record<string, unknown>, doneItemIds: string[] = []) =>
+      run(() => {
+        const profile = me()
+        if (!isClientUser(profile) || !profile.client_id) {
+          throw new DataError('forbidden', 'Only a client user can submit the setup form.')
+        }
+        const client = db.clients.find((c) => c.id === profile.client_id)
+        if (!client) throw new DataError('not_found', 'Client not found.')
+        client.onboarding_answers = answers
+
+        const doneSet = new Set(doneItemIds)
+        for (const item of db.onboarding_items) {
+          if (item.client_id === client.id && item.owner === 'client' && doneSet.has(item.id)) {
+            item.status = 'done'
+            item.completed_at = item.completed_at ?? nowIso()
+          }
+        }
+        return client
+      }),
+
+    gates: (clientId: string) =>
+      run(() => {
+        guard('onboarding', 'view', clientId)
+        const agreement_signed = db.documents.some(
+          (doc) => doc.client_id === clientId && doc.kind === 'agreement' && doc.status === 'signed',
+        )
+        const first_invoice_paid = db.invoices.some((inv) => inv.client_id === clientId && inv.status === 'paid')
+        return { agreement_signed, first_invoice_paid }
+      }),
+  },
+
+  documents: {
+    list: (clientId: string) =>
+      run(() => {
+        const profile = guard('document', 'view', clientId)
+        let docs = db.documents.filter((doc) => doc.client_id === clientId)
+        if (isClientUser(profile)) {
+          docs = docs.filter((doc) => doc.status === 'sent' || doc.status === 'signed')
+        }
+        return [...docs].sort((a, b) => b.created_at.localeCompare(a.created_at))
+      }),
+
+    create: (input: DocumentInsert) =>
+      run(() => {
+        guard('document', 'create', input.client_id)
+        if (!input.title?.trim()) throw new DataError('invalid', 'A document needs a title.')
+        const doc: ClientDocument = {
+          id: newId(),
+          client_id: input.client_id,
+          kind: input.kind,
+          title: input.title.trim(),
+          file_id: input.file_id ?? null,
+          external_url: input.external_url ?? null,
+          status: input.status ?? 'draft',
+          sent_at: input.status === 'sent' || input.status === 'signed' ? (input.sent_at ?? nowIso()) : null,
+          signed_at: input.status === 'signed' ? (input.signed_at ?? nowIso()) : null,
+          created_at: nowIso(),
+        }
+        db.documents.push(doc)
+        return doc
+      }),
+
+    update: (id: string, patch: DocumentPatch) =>
+      run(() => {
+        const doc = db.documents.find((d) => d.id === id)
+        if (!doc) throw new DataError('not_found', `No document ${id}`)
+        guard('document', 'edit', doc.client_id)
+        if (patch.kind !== undefined) doc.kind = patch.kind
+        if (patch.title !== undefined) doc.title = patch.title.trim()
+        if (patch.file_id !== undefined) doc.file_id = patch.file_id
+        if (patch.external_url !== undefined) doc.external_url = patch.external_url
+        if (patch.status !== undefined) {
+          doc.status = patch.status
+          if (patch.status === 'sent') {
+            doc.sent_at = patch.sent_at ?? doc.sent_at ?? nowIso()
+          } else if (patch.status === 'signed') {
+            doc.sent_at = doc.sent_at ?? nowIso()
+            doc.signed_at = patch.signed_at ?? doc.signed_at ?? nowIso()
+          }
+        }
+        if (patch.sent_at !== undefined) doc.sent_at = patch.sent_at
+        if (patch.signed_at !== undefined) doc.signed_at = patch.signed_at
+        return doc
+      }),
+
+    remove: (id: string) =>
+      run(() => {
+        const doc = db.documents.find((d) => d.id === id)
+        if (!doc) throw new DataError('not_found', `No document ${id}`)
+        guard('document', 'delete', doc.client_id)
+        removeWhere(db.documents, (d) => d.id === id)
+      }),
+  },
+
+  templates: {
+    list: () =>
+      run(() => {
+        const profile = me()
+        if (isClientUser(profile)) throw new DataError('forbidden', 'Only staff may access message templates.')
+        guard('template', 'view')
+        return [...db.message_templates].sort((a, b) => a.position - b.position)
+      }),
+
+    update: (id: string, patch: TemplatePatch) =>
+      run(() => {
+        const profile = me()
+        if (isClientUser(profile)) throw new DataError('forbidden', 'Only staff may update message templates.')
+        guard('template', 'edit')
+        const template = db.message_templates.find((t) => t.id === id)
+        if (!template) throw new DataError('not_found', `No template ${id}`)
+        if (patch.title !== undefined && !patch.title.trim()) {
+          throw new DataError('invalid', 'Title cannot be empty.')
+        }
+        if (patch.body !== undefined && !patch.body.trim()) {
+          throw new DataError('invalid', 'Body cannot be empty.')
+        }
+        if (patch.title !== undefined) template.title = patch.title.trim()
+        if (patch.subject !== undefined) template.subject = patch.subject
+        if (patch.body !== undefined) template.body = patch.body
+        template.updated_at = nowIso()
+        return template
       }),
   },
 }

@@ -1,0 +1,468 @@
+=== PAGE 1 ===
+Vernex Client Onboarding Playbook
+Oct 12, 2026  ·  @BOSS
+A new client goes from proposal to first approved work in about two weeks, through one
+hard gate: a signed agreement and a paid first invoice. Everything after the gate runs from
+the admin portal.
+The flow at a glance
+The top row is selling; the bottom row is onboarding. Nothing on the bottom row starts
+until the gate is passed.
+Step by step
+Every new client gets the same 11 sends in the same order, from the proposal to the first
+monthly report. Work starts only after two things are true: the agreement is signed and
+the first invoice is paid. Skipping either is how agencies end up doing a month of work for
+free.
+Client onboarding flow · proposal to first approvals
+Vernex Client Onboarding Playbook
+Page 1 of 14
+=== PAGE 2 ===
+# When What you send Channel In the admin portal
+today
+1 After the
+discovery call,
+within 24h
+Proposal (scope,
+price, timeline, KPIs)
+Email + PDF Pipeline: move lead
+to Proposal
+2 Proposal + 3 days,
+if no reply
+Proposal follow-up WhatsApp Pipeline: lead next
+action
+3 Client says yes Agreement for
+signature
+Email + PDF Not yet: add
+Documents step
+4 Same day as
+agreement
+First invoice (month 1
+retainer, or 50%
+website advance)
+Email +
+payment link
+Invoices tab
+5 Agreement
+signed and
+invoice paid
+Welcome message +
+portal invite
+WhatsApp +
+email
+Pipeline: Convert to
+client, then Team tab
+invite
+6 Welcome + 1 day Onboarding form and
+access checklist
+Email Not yet: add
+Onboarding
+checklist
+7 Within 5 working
+days
+Kickoff call (45 min)
+and written summary
+after it
+Google Meet,
+then email
+Projects tab:
+milestones from the
+call
+8 Day 7 to 14 First deliverables for
+approval
+Portal +
+WhatsApp
+nudge
+Deliverables tab;
+Outbox reminders
+9 3 days before
+each due date,
+then after
+Payment reminders WhatsApp +
+email
+Outbox
+10 First working day
+of each month
+Monthly report and
+next month's plan
+Email + portal Performance page; AI
+Drafts
+11 Month 5 of a 6-
+month term
+Renewal conversation Call, then
+email
+Not yet: add renewal
+reminder
+Vernex Client Onboarding Playbook
+Page 2 of 14
+=== PAGE 3 ===
+Who sends what. You (Boss) send 1, 3, 5, 7 and 11 personally; these are relationship
+moments. Your PM can send 2, 4, 6, 8, 9 and 10 from the portal.
+Message templates
+Copy, fill the brackets, send. Keep the tone of a growth partner: specific, calm, no hype
+words like "guaranteed" or "best agency".
+1. Proposal email
+Subject: [Business name] growth plan: next 90 days
+Hi [Name],
+Thank you for the time on [day]. As promised, the plan is attached.
+What we heard:
+- [Problem 1, in their words]
+- [Problem 2]
+What we'll do:
+- Month 1: audit, strategy and setup ([key items])
+- Month 2: launch and optimise ([key items])
+- Month 3 onward: scale what works
+What we'll measure: [KPI 1], [KPI 2], against your current baseline of 
+[baseline].
+Investment: ₹ [amount]/month + GST, for a [6]-month term. Ad spend is paid
+directly to Meta/Google and is separate.
+The proposal is valid until [date]. Happy to walk through it on a 15-minute
+call this week.
+Boss Anandaa
+Founder, Vernex · vernex.in
+Vernex Client Onboarding Playbook
+Page 3 of 14
+=== PAGE 4 ===
+2. Proposal follow-up (WhatsApp)
+Hi [Name], Boss from Vernex. Did you get a chance to look at the plan?
+Happy to adjust the scope if anything doesn't fit. Is a 15-minute call
+on [day] at [time] okay?
+3. Agreement email
+Subject: Agreement: Vernex x [Business name]
+Hi [Name],
+Great to have you on board. Attached is our services agreement, covering
+the scope, fees and terms we discussed.
+Once it's signed and the first invoice is cleared, we start the same week.
+The invoice is also attached, with a payment link.
+Any questions on the agreement, just reply here.
+Boss Anandaa
+4. Welcome message (WhatsApp, after payment)
+Welcome to Vernex, [Name]! 🙌  We're excited to grow [Business name] with you.
+Here's what happens next:
+1. You'll get an email to sign in to your Vernex portal. Everything lives
+   there: approvals, files, reports and invoices.
+2. Tomorrow we'll send a short onboarding form and the access we need.
+3. Kickoff call: [day, date, time]. 45 minutes.
+Your account lead is [Name], reachable on this number.
+(One emoji in a WhatsApp welcome is fine; keep emails emoji-free.)
+Vernex Client Onboarding Playbook
+Page 4 of 14
+=== PAGE 5 ===
+5. Welcome email with portal invite
+Subject: Welcome to Vernex: your client portal is ready
+Hi [Name],
+Your Vernex portal is live: [portal link]
+Sign in with this email address. No password needed; we send you a link.
+In the portal you can:
+- approve or request changes on every post, ad and page
+- see your leads, reach and spend in one place
+- download your files and invoices
+- write to me directly through "Note to the founder"
+Kickoff: [day, date, time], [Google Meet link].
+Boss Anandaa
+6. Onboarding form and access request
+Subject: Before kickoff: 15 minutes of setup
+Hi [Name],
+To hit the ground running, please complete this before [date]:
+1. Onboarding form (10 min): [form link]
+2. Access (see the step-by-step guide attached):
+   [the access list for their service, from the checklists below]
+3. Upload your logo, brand colours and 10+ photos to Brand Assets in the
+   portal.
+We never ask for your passwords. All access is given through Meta Business,
+Google and your hosting account's own sharing.
+Thanks,
+[PM name], Vernex
+Vernex Client Onboarding Playbook
+Page 5 of 14
+=== PAGE 6 ===
+7. Kickoff summary
+Subject: Kickoff summary and next steps
+Hi [Name],
+Thank you for today. What we agreed:
+- Goals for 90 days: [goal 1], [goal 2]
+- Baseline today: [numbers]
+- First deliverables: [items], for your approval by [date]
+- Your actions: [items], by [date]
+- Our next check-in: [day, time]
+The full plan is in your portal under Dashboard.
+[PM name]
+8. Invoice email
+Subject: Invoice [INV-0001]: Vernex, [Month Year]
+Hi [Name],
+Please find invoice [INV-0001] for ₹ [total] ( ₹ [amount] + GST ₹ [gst]),
+due on [date].
+Pay online: [Razorpay link]
+Or bank transfer: [Account name], A/c [no.], IFSC [code], UPI [id]
+Thank you,
+Vernex Accounts
+9. Payment reminders (WhatsApp)
+3 days before: Hi [Name], a quick note that invoice [INV] for ₹ [total] is
+due on [date]. Pay here: [link]. Thank you!
+On the due date: Hi [Name], invoice [INV] ( ₹ [total]) is due today. Link:
+[link]. Let me know if you need anything from our side.
+3 days late: Hi [Name], invoice [INV] is 3 days overdue. Could you check with
+your accounts team? [link]
+Vernex Client Onboarding Playbook
+Page 6 of 14
+=== PAGE 7 ===
+7 days late: Hi [Name], invoice [INV] is now 7 days overdue. Please clear it
+by [date] so this month's campaigns run without a break.
+14 days late (Boss calls, then writes): As discussed on our call, we'll pause new
+work from [date] until invoice [INV] is cleared, as per clause [X] of our
+agreement.
+10. Monthly report
+Subject: [Business name]: [Month] results and [next month] plan
+Hi [Name],
+The headline: [one sentence with the main number, e.g. "142 leads at ₹ 84
+each, up 18% on September"].
+What worked: [1-2 points]
+What we're changing: [1-2 points]
+Next month: [plan]
+Full report in your portal: [link]
+[PM name]
+11. Renewal (after a call, in month 5)
+Subject: The next 6 months for [Business name]
+Hi [Name],
+Thanks for the chat. Since we started: [baseline] -> [current numbers].
+For the next term we recommend: [plan], at ₹ [amount]/month + GST.
+The new term would start on [date]. If you're happy, I'll send the renewal
+agreement this week.
+Boss Anandaa
+Pitch for a cold lead stays with your daily lead briefs and outreach sequence
+(observation, problem, opportunity, offer, 15-minute call), so it isn't repeated here.
+Vernex Client Onboarding Playbook
+Page 7 of 14
+=== PAGE 8 ===
+Agreement checklist
+Keep your existing 4-page format (3 pages of terms plus the signature page, on the
+VerneX letterhead). Make sure every agreement covers the clauses below; the ones
+marked new are not in the AGK Fitness agreement as described in the project notes. This
+is a drafting checklist, not legal advice: have a lawyer review the master template once,
+then reuse it.
+Both service types:
+Website projects only:
+Parties, GSTINs, addresses, start date, signatories
+Scope: deliverables per month or per project, listed specifically
+Out of scope, and how extra work is quoted (change request) new
+Fees, GST on top, payment due dates, late-payment terms and the right to pause work
+when an invoice is 14+ days overdue new
+Ad spend paid by the client directly to Meta or Google; 50% ad-budget advance before
+campaigns launch
+Third-party costs (domain, hosting, plugins, stock assets, booking engines) paid by the
+client
+Revision limits per deliverable, and that extra rounds are paid new
+Approval rule: feedback within 3 working days, or the item counts as approved;
+approvals given in the portal are binding new
+Client responsibilities: access, brand assets, timely feedback, a single decision-maker
+KPIs with baseline, target and measurement period; results are indicative, not
+guaranteed
+Ownership: the client owns paid-for final work; Vernex keeps working files and may
+show the work in its portfolio unless the client opts out new
+Confidentiality, and handling of the client's customer data under India's DPDP Act new
+Term, renewal and termination (for cause or non-payment during the fixed term)
+Account handover on exit: Vernex removes its own access and returns all assets new
+Governing law: India, courts at Chennai
+Payment in milestones: 50% advance, 30% on design approval, 20% before launch
+Number of design rounds included, and the page list
+Content: who writes copy and supplies photos, and by when; delays on the client side
+move the launch date
+Vernex Client Onboarding Playbook
+Page 8 of 14
+=== PAGE 9 ===
+Invoices and payments
+Bill retainers in advance, on the 1st of each month, due within 7 days; bill websites in
+milestones. Never start a month's work on an unpaid invoice. Confirm the tax points
+below with your CA once; they depend on Vernex's GST registration.
+Fields every invoice needs (GST-registered): Vernex legal name, address and GSTIN;
+invoice number in one series (INV-0001, INV-0002…); invoice date; client name, address
+and GSTIN; place of supply (state); description of the service and the month; SAC code;
+taxable value; GST rate and amount; total in figures and words; bank and UPI details;
+signature.
+Tax quick reference (check with your CA):
+Digital marketing and web design are charged GST at 18%.
+Client in Tamil Nadu: CGST 9% + SGST 9%. Client in another state: IGST 18%.
+Client outside India: usually an export of services, zero-rated under a Letter of
+Undertaking (LUT), billed in their currency.
+If Vernex is not yet GST-registered (services turnover under ₹ 20 lakh a year), do not
+add GST; issue a plain invoice.
+Business clients may deduct TDS before paying. Ask at onboarding so the shortfall isn't
+a surprise.
+Payment schedule:
+Source files and credentials handed over only after final payment
+Warranty: 30 days of free bug fixes after launch; changes after that are paid
+Optional maintenance plan as a separate monthly fee
+Service When you invoice Due
+Monthly retainer 1st of each month, for that month 7 days
+Ad-budget advance Before each campaign launch Before launch
+Website: advance On signing Before work
+starts
+Website: design approval When the client approves the
+design
+7 days
+Vernex Client Onboarding Playbook
+Page 9 of 14
+=== PAGE 10 ===
+The reminder ladder (3 days before, on the due date, then 3, 7 and 14 days late) is in the
+templates above. Mark each one sent in the portal's Outbox so you have a record.
+Social media client checklist
+A social media and ads client is ready to go live when access, brand assets and the first
+content batch are all in place, usually by day 10. Ask for access through Meta Business
+partner sharing, never the client's passwords.
+Access (week 1):
+Brand and content inputs:
+Service When you invoice Due
+Website: launch Before the site goes live Before launch
+Extra revisions or change
+requests
+When the client accepts the quote 7 days
+Instagram switched to a Professional (Business) account and linked to the Facebook
+Page
+Client adds Vernex's Business Portfolio as a partner in Meta Business Settings (Page,
+Instagram, ad account, pixel), using your Business ID
+Ad account: client's own, with their card on it, so ad spend never passes through
+Vernex
+Meta Pixel or Conversions API on their website; lead form or WhatsApp click-to-chat
+as the ad destination
+Google Business Profile manager access (for local businesses)
+Optional: YouTube channel and LinkedIn Page admin
+Client connects Instagram and Facebook in the portal so insights sync
+Logo (SVG or PNG), brand colours, fonts
+20+ real photos and videos: space, team, customers (with permission)
+Offers, prices and USPs; what never to say
+Top 3 competitors and 3 accounts they admire
+Approver name and turnaround promise (3 working days)
+Shoot day booked if Vernex is creating video
+Vernex Client Onboarding Playbook
+Page 10 of 14
+=== PAGE 11 ===
+Baseline, recorded on day 1 (screenshots in the Vault): followers, reach and engagement
+for the last 30 days, current leads per month and cost per lead, Google rating and review
+count.
+Month-1 deliverables:
+Website client checklist
+A website project runs in five gated stages, and each gate needs a client approval in the
+portal before the next starts. Most website delays come from content arriving late, so
+collect it in week 1, not week 4.
+Access and accounts (in the client's name):
+Account audit with the top 5 fixes
+Bio, highlights and link-in-bio cleaned up
+Content pillars and a 30-day calendar for approval
+Ad campaign structure, audiences and first creatives for approval
+Lead handling: who answers enquiries, and how fast
+KPI targets agreed in writing against the baseline
+Stage Typical
+length
+What the client gives or approves Gate
+1. Discovery Week 1 Questionnaire, goals, 3 sites they
+like, competitors
+Signed-off brief
+2. Sitemap and
+content
+Week 1–2 Page list, copy (or approval of
+Vernex's copy), photos
+Content approved
+3. Design Week 2–3 Home page design, then inner
+pages; included rounds only
+Design approved,
+30% invoice
+4. Build on
+staging
+Week 3–5 Review on a staging link, bug list in
+the portal
+Staging approved,
+20% invoice
+5. Launch and
+handover
+Week 5–6 Domain DNS change, final check Live, then 30-day
+warranty
+Domain registrar access (GoDaddy, Hostinger, etc.) or a DNS user
+Hosting or platform account owned by the client
+Vernex Client Onboarding Playbook
+Page 11 of 14
+=== PAGE 12 ===
+Discovery questionnaire (send as a form):
+1. What should a visitor do on the site: call, WhatsApp, book, buy or enquire?
+2. Who is the ideal customer, and what do they search for?
+3. Services and prices to show, and which matters most?
+4. Three websites you like, and why?
+5. Must-have features: booking, payments, blog, multilingual (Tamil, Hindi), gallery?
+6. Who writes the copy, and who approves it?
+7. Launch deadline, and anything tied to it (an event or an offer)?
+Launch checklist: mobile check on 2 real phones, page speed checked, forms tested end
+to end, SSL on, 301 redirects from old pages, GA4 and pixel firing, Google Business Profile
+link updated, backup taken, credentials and a short how-to video handed over.
+After launch: offer a maintenance plan (updates, backups, small edits) as a monthly fee,
+and suggest the next step: ads or SEO to bring traffic to the new site.
+What to add to the admin portal
+The portal already covers half of this flow: Pipeline with Convert to client, the Team,
+Projects, Deliverables, Requests and Invoices tabs, the Outbox for reminders, and AI
+Drafts. Four additions close the gap, so a new client is onboarded from one screen instead
+of from WhatsApp and memory.
+Business email set up for enquiry forms
+Google Analytics 4 and Search Console: client owns, Vernex added as user
+Third-party tools in their name: booking engine, payment gateway, WhatsApp number
+Add Where What it does
+Onboarding tab Admin → client page Checklist from this playbook, picked by
+service type (social, website, both),
+with a progress bar and an owner per
+item
+Templates library Admin sidebar The 11 messages above with merge
+fields filled from the client record;
+Copy, Send on WhatsApp, Open in
+email
+Vernex Client Onboarding Playbook
+Page 12 of 14
+=== PAGE 13 ===
+Claude Code prompt (Sonnet 5.5, high effort):
+Read CLAUDE.md and docs/ONBOARDING_PLAYBOOK.md. Add client onboarding to the
+portal on the existing mock data layer, using the UI kit, query hooks and
+useCan() only.
+1. Types and mock data: OnboardingItem (client_id, service: social | website 
+|
+   common, stage, title, owner: vernex | client, status, due_date), Document
+   (client_id, kind: proposal | agreement | other, file or Drive URL, status:
+   draft | sent | signed, signed_at), MessageTemplate (key, title, channel:
+   whatsapp | email, subject, body with {{merge_fields}}), and
+   onboarding_answers on Client. Seed the checklists and the 11 templates
+   from the playbook.
+2. Admin client page: new "Onboarding" tab, first in the tab order. Pick the
+   service type to generate the checklist; group items by stage; tick items;
+   progress bar; overdue items in --bad. A banner shows the two gates:
+   "Agreement signed" and "First invoice paid"; until both are true, show
+   "Don't start work yet".
+3. Admin client page: new "Documents" tab to add a proposal or agreement
+   (upload or Drive link), mark it sent or signed.
+4. Admin sidebar: "Templates" page listing the templates. Choosing a client
+   fills the merge fields ({{client_name}}, {{contact_name}}, 
+{{portal_link}},
+   {{invoice_number}}, {{amount}}, {{due_date}}, {{kickoff_time}},
+   {{lead_name}}). Buttons: Copy, Send on WhatsApp (wa.me link), Open in 
+email
+   (mailto link). Staff can edit template text.
+5. After "Convert to client" in the Pipeline, open the new client's
+   Onboarding tab instead of the client list.
+6. Client side: on first sign-in, if onboarding_answers is empty, show a
+   short "Let's get set up" form (the discovery questions for their service
+   type, plus the access checklist with a tick per item and a help link).
+   Saving it marks the matching admin checklist items done.
+7. Clients see their signed agreement in Vault > Documents; they never see
+Add Where What it does
+Documents Admin → client page, and
+client Vault
+Proposal and agreement PDFs with
+status: draft, sent, signed
+Client onboarding
+form
+Client side, first login Discovery questionnaire and access
+checklist the client fills in the portal
+Vernex Client Onboarding Playbook
+Page 13 of 14
+=== PAGE 14 ===
+   drafts, templates or the admin checklist.
+8. Tests: client cannot read templates or draft documents; ticking the
+   client form updates the admin checklist. Run build, lint and tests.
+Report what you added and the test results.
+Before running it, export this doc as Markdown and save it in the repo as
+docs/ONBOARDING_PLAYBOOK.md , so the prompt can read the checklists and templates
+from it.
+Vernex Client Onboarding Playbook
+Page 14 of 14

@@ -20,6 +20,9 @@ const PerformancePage = lazy(() => import('./pages/client/PerformancePage'))
 const BillingPage = lazy(() => import('./pages/client/BillingPage'))
 const FounderBoxPage = lazy(() => import('./pages/client/FounderBoxPage'))
 const ProfilePage = lazy(() => import('./pages/client/ProfilePage'))
+const SetupPage = lazy(() => import('./pages/client/SetupPage'))
+const AuthCallbackPage = lazy(() => import('./pages/auth/AuthCallbackPage'))
+const StaffPage = lazy(() => import('./pages/admin/StaffPage'))
 
 const ClientsPage = lazy(() => import('./pages/admin/ClientsPage'))
 const ClientPage = lazy(() => import('./pages/admin/client/ClientPage'))
@@ -28,6 +31,9 @@ const PipelinePage = lazy(() => import('./pages/admin/PipelinePage'))
 const OutboxPage = lazy(() => import('./pages/admin/OutboxPage'))
 const FounderInboxPage = lazy(() => import('./pages/admin/FounderInboxPage'))
 const AiDraftsPage = lazy(() => import('./pages/admin/AiDraftsPage'))
+const TemplatesPage = lazy(() => import('./pages/admin/TemplatesPage'))
+const AgreementPage = lazy(() => import('./pages/admin/agreement/AgreementPage'))
+const InvoiceGeneratorPage = lazy(() => import('./pages/admin/invoice/InvoiceGeneratorPage'))
 
 // Development only: the gallery is not routed or bundled in production builds.
 const UiGallery = import.meta.env.DEV ? lazy(() => import('./pages/dev/UiGallery')) : null
@@ -55,9 +61,12 @@ export default function App() {
         <Route path="/admin/login" element={page(<LoginPage audience="staff" />)} />
       </Route>
 
+      <Route path="/auth/callback" element={page(<AuthCallbackPage />)} />
+
       <Route element={<RequireClient />}>
         <Route element={<ClientShell />}>
           <Route index element={page(<DashboardPage />)} />
+          <Route path="setup" element={page(<SetupPage />)} />
           <Route path="approvals" element={page(<ApprovalsPage />)} />
           <Route path="deliverables/:id" element={page(<DeliverablePage />)} />
           <Route path="requests" element={page(<RequestsPage />)} />
@@ -77,7 +86,13 @@ export default function App() {
           <Route path="clients" element={page(<ClientsPage />)} />
           <Route path="clients/:id" element={page(<ClientPage />)} />
           <Route path="clients/:id/preview" element={page(<PreviewPage />)} />
+          <Route path="clients/:id/agreement" element={page(<AgreementPage />)} />
+          <Route path="clients/:id/invoice" element={page(<InvoiceGeneratorPage />)} />
+          <Route path="agreement" element={page(<AgreementPage />)} />
+          <Route path="invoice" element={page(<InvoiceGeneratorPage />)} />
           <Route path="pipeline" element={page(<PipelinePage />)} />
+          <Route path="templates" element={page(<TemplatesPage />)} />
+          <Route path="staff" element={page(<StaffPage />)} />
           <Route path="outbox" element={page(<OutboxPage />)} />
           <Route path="founder-inbox" element={page(<FounderInboxPage />)} />
           <Route path="ai-drafts" element={page(<AiDraftsPage />)} />

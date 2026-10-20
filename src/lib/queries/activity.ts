@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
 import type {
   ActivityFilter,
@@ -8,6 +8,7 @@ import type {
   CommentInput,
   FileFilter,
   FounderMessage,
+  SocialMetricImport,
   SocialMetricsFilter,
   TopPostsFilter,
 } from '../../data'
@@ -227,6 +228,15 @@ export function useLastSyncedAt(clientId: string | undefined) {
     queryKey: keys.detail(R.socialMetrics, clientId),
     queryFn: () => data.socialMetrics.lastSyncedAt({ client_id: clientId as string }),
     enabled: Boolean(clientId),
+  })
+}
+
+/** Staff only: adds or replaces daily numbers from a CSV, then refreshes everything that shows them. */
+export function useImportSocialMetrics() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (rows: SocialMetricImport[]) => data.socialMetrics.importDaily(rows),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.all(R.socialMetrics) }),
   })
 }
 

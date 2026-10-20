@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Eye } from 'lucide-react'
+import { ArrowLeft, Eye, FileCheck, Receipt } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { InlineField } from '../../../components/admin/InlineField'
 import { Icon } from '../../../components/Icon'
@@ -12,12 +12,15 @@ import { useClient, useUpdateClient } from '../../../lib/queries'
 import type { Client, Update } from '../../../types/db'
 import { DeleteClientDialog } from '../ClientsPage'
 import { DeliverablesTab } from './DeliverablesTab'
+import { DocumentsTab } from './DocumentsTab'
 import { InvoicesTab } from './InvoicesTab'
+import { OnboardingTab } from './OnboardingTab'
+import { PerformanceTab } from './PerformanceTab'
 import { ProjectsTab } from './ProjectsTab'
 import { RequestsTab } from './RequestsTab'
 import { TeamTab } from './TeamTab'
 
-const TAB_IDS = ['overview', 'team', 'projects', 'deliverables', 'requests', 'invoices'] as const
+const TAB_IDS = ['onboarding', 'overview', 'documents', 'team', 'projects', 'deliverables', 'requests', 'invoices', 'performance'] as const
 type TabId = (typeof TAB_IDS)[number]
 
 export default function ClientPage() {
@@ -67,15 +70,31 @@ export default function ClientPage() {
             <h1 className="text-[1.4rem] leading-tight">{data.name}</h1>
             <p className="text-ink-muted">{[data.industry, data.city].filter(Boolean).join(' · ')}</p>
           </div>
-          {canPreview && (
+          <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={`/admin/clients/${data.id}/preview`}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-card border border-rule lg:min-h-[36px] bg-surface px-4 font-medium transition-colors duration-150 hover:bg-ink/5"
+              to={`/admin/clients/${data.id}/agreement`}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule bg-surface px-3 text-sm font-medium transition-colors duration-150 hover:bg-ink/5"
             >
-              <Icon icon={Eye} size={16} />
-              Preview as client
+              <Icon icon={FileCheck} size={15} />
+              Generate Agreement
             </Link>
-          )}
+            <Link
+              to={`/admin/clients/${data.id}/invoice`}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule bg-surface px-3 text-sm font-medium transition-colors duration-150 hover:bg-ink/5"
+            >
+              <Icon icon={Receipt} size={15} />
+              Create Invoice
+            </Link>
+            {canPreview && (
+              <Link
+                to={`/admin/clients/${data.id}/preview`}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-card border border-rule lg:min-h-[36px] bg-surface px-4 font-medium transition-colors duration-150 hover:bg-ink/5"
+              >
+                <Icon icon={Eye} size={16} />
+                Preview as client
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -84,12 +103,15 @@ export default function ClientPage() {
         value={tab}
         onValueChange={(next) => setParams(next === 'overview' ? {} : { tab: next })}
         items={[
+          { id: 'onboarding', label: 'Onboarding', content: <OnboardingTab clientId={data.id} /> },
           { id: 'overview', label: 'Overview', content: <Overview client={data} /> },
+          { id: 'documents', label: 'Documents', content: <DocumentsTab clientId={data.id} /> },
           { id: 'team', label: 'Team', content: <TeamTab clientId={data.id} /> },
           { id: 'projects', label: 'Projects', content: <ProjectsTab clientId={data.id} /> },
           { id: 'deliverables', label: 'Deliverables', content: <DeliverablesTab clientId={data.id} /> },
           { id: 'requests', label: 'Requests', content: <RequestsTab clientId={data.id} /> },
           { id: 'invoices', label: 'Invoices', content: <InvoicesTab clientId={data.id} /> },
+          { id: 'performance', label: 'Performance', content: <PerformanceTab clientId={data.id} /> },
         ]}
       />
     </div>

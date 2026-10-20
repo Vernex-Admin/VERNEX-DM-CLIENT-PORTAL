@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Receipt, Trash2 } from 'lucide-react'
+import { Link } from 'react-router'
 import { ConfirmDialog } from '../../../components/admin/ConfirmDialog'
 import { FormDrawer } from '../../../components/admin/FormDrawer'
 import { Icon } from '../../../components/Icon'
@@ -53,10 +54,19 @@ export function InvoicesTab({ clientId }: { clientId: string }) {
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[1.1rem]">Invoices</h2>
         {canCreate && (
-          <Button variant="primary" onClick={() => setDrawer('new')}>
-            <Icon icon={Plus} size={16} />
-            New invoice
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/admin/clients/${clientId}/invoice`}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule px-3 text-sm font-medium hover:bg-ink/5"
+            >
+              <Icon icon={Receipt} size={15} />
+              Full Invoice Generator
+            </Link>
+            <Button variant="primary" onClick={() => setDrawer('new')}>
+              <Icon icon={Plus} size={16} />
+              New invoice
+            </Button>
+          </div>
         )}
       </div>
 
