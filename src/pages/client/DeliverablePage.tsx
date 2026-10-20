@@ -333,6 +333,8 @@ function RevisionDrawer(props: {
   const [files, setFiles] = useState<File[]>([])
   const [tried, setTried] = useState(false)
   const [fileError, setFileError] = useState<string>()
+  // One key per form submission: a double-click sends the same key and counts once.
+  const idempotencyKey = useRef(crypto.randomUUID())
 
   const tooShort = description.trim().length < MIN_DESCRIPTION
 
@@ -354,9 +356,13 @@ function RevisionDrawer(props: {
         priority,
         revision_type: type,
         attachment_names: files.map((file) => file.name),
+        idempotency_key: idempotencyKey.current,
       },
       {
-        onSuccess: () => toast({ title: `Revision ${props.number} of ${props.limit} sent`, description: 'We will get back to you soon.', tone: 'ok' }),
+        onSuccess: () => {
+          idempotencyKey.current = crypto.randomUUID()
+          toast({ title: `Revision ${props.number} of ${props.limit} sent`, description: 'We will get back to you soon.', tone: 'ok' })
+        },
         onError: (error) => toast({ title: 'Could not send your request', description: messageOf(error), tone: 'bad' }),
       },
     )

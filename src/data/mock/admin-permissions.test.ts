@@ -120,7 +120,7 @@ describe('admin roles', () => {
   it('give both Vernex roles every admin write the console uses', () => {
     const roles: UserRole[] = ['vernex_founder', 'vernex_pm']
     const needed = [
-      'client:create', 'client:edit', 'client:delete', 'client_user:create', 'client_user:edit', 'client_user:delete',
+      'client:create', 'client:edit', 'client_user:create', 'client_user:edit', 'client_user:delete',
       'project:create', 'project:edit', 'project:delete', 'milestone:create', 'milestone:edit', 'milestone:delete',
       'deliverable:create', 'deliverable:edit', 'deliverable:delete', 'revision:edit', 'service_request:edit',
       'invoice:create', 'invoice:edit', 'invoice:delete',
@@ -128,6 +128,11 @@ describe('admin roles', () => {
     for (const role of roles) {
       for (const permission of needed) expect(POLICY[role], `${role} ${permission}`).toContain(permission)
     }
+  })
+
+  it('keep client deletion to the founder', () => {
+    expect(POLICY.vernex_founder).toContain('client:delete')
+    expect(POLICY.vernex_pm).not.toContain('client:delete')
   })
 
   it('keep the Founder Box to the founder: a PM can neither read nor answer it', async () => {

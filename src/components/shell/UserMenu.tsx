@@ -1,4 +1,4 @@
-import { LogOut, User } from 'lucide-react'
+import { CheckSquare, LogOut, User } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { useCurrentProfile, useSignOut } from '../../lib/queries'
 import type { Audience } from '../../lib/permissions'
@@ -15,6 +15,9 @@ export function UserMenu({ audience, profilePath }: { audience: Audience; profil
 
   const items: MenuItem[] = [
     ...(profilePath ? [{ id: 'profile', label: 'Profile', icon: User, onSelect: () => navigate(profilePath) }] : []),
+    ...(audience === 'client'
+      ? [{ id: 'setup', label: 'Setup', icon: CheckSquare, onSelect: () => navigate('/setup') }]
+      : []),
     {
       id: 'sign-out',
       label: 'Sign out',

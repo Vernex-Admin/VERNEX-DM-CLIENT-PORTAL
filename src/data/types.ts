@@ -39,6 +39,10 @@ import type {
   NotificationPrefs,
   DeliverableVersion,
   RevisionType,
+  ClientDocument,
+  MessageTemplate,
+  OnboardingItem,
+  ServiceType,
 } from '../types/db'
 
 // The contract every backend implements. The mock implements it today; a Supabase
@@ -68,6 +72,8 @@ export type AuthSession = { user: AuthUser; expires_at: string }
 
 export interface AuthRepo {
   getSession(): Promise<AuthSession | null>
+  /** Realtime sign-in with email and password. */
+  signInWithPassword(input: { email: string; password?: string }): Promise<AuthSession>
   /** Sends a sign-in link. Like Supabase, it does not reveal whether the email has an account. */
   signInWithOtp(input: { email: string }): Promise<void>
   /** Mock only: stands in for clicking the emailed link. Rejects when no link was sent to that email. */
@@ -75,6 +81,11 @@ export interface AuthRepo {
   /** Mock only: email stands in for the Google account chosen on Google's own screen. */
   signInWithOAuth(input: { provider: 'google'; email?: string }): Promise<AuthSession>
   signOut(): Promise<void>
+  /**
+   * Tells the app when a different person signs in or the session ends (including in another tab),
+   * so it can refresh. Returns a function that stops listening. The mock never calls it.
+   */
+  onAuthChange(listener: (event: 'signed_in' | 'signed_out') => void): () => void
 }
 
 export interface SessionRepo {
@@ -108,6 +119,16 @@ export interface ProfilesRepo {
   listAccountLeads(): Promise<ClientAssignment[]>
   /** Staff only: makes `userId` the client's account lead (and assigns them if they were not). */
   setAccountLead(clientId: string, userId: string): Promise<ClientAssignment>
+  /** Founder only: adds a Vernex PM. They sign in later with that email; there is no auth step. */
+  createStaff(input: { email: string; full_name: string }): Promise<Profile>
+  /** Founder only: switches a Vernex person off (or back on). They keep their history but cannot sign in. */
+  setActive(id: string, isActive: boolean): Promise<Profile>
+  /** Founder only: every client-to-staff assignment, leads included. */
+  listAssignments(): Promise<ClientAssignment[]>
+  /** Founder only: gives a PM access to a client. */
+  assignToClient(clientId: string, userId: string): Promise<ClientAssignment>
+  /** Founder only: removes a PM from a client. The account lead cannot be removed. */
+  unassignFromClient(clientId: string, userId: string): Promise<void>
   createClientUser(input: ProfileInsert & { client_id: string }): Promise<Profile>
   /** The signed-in user edits their own name, WhatsApp number and notification choices. */
   updateMe(patch: MyProfilePatch): Promise<Profile>
@@ -140,6 +161,8 @@ export type PublishVersion = {
   preview_url: string
   /** Set to `client` to send it to the client for review. */
   visibility?: Visibility
+  /** The file when it was uploaded rather than linked. Supabase stores it in the private vault. */
+  file?: File
 }
 
 export interface DeliverablesRepo {
@@ -165,6 +188,8 @@ export type RevisionRequest = {
   priority?: RevisionPriority
   revision_type?: RevisionType
   attachment_names?: string[]
+  /** One per form submission, so a double-click counts once. Made by the data layer if left out. */
+  idempotency_key?: string
 }
 
 export interface RevisionsRepo {
@@ -229,12 +254,25 @@ export type BrandAssetUpload = {
   size_bytes?: number
   /** Where the browser holds the file (an object URL); the mock keeps no file bodies. */
   url?: string
+  /** The file itself. Supabase uploads it to the private vault; files over 50 MB are refused. */
+  file?: File
+}
+
+/** A Google Drive (or other) link kept as a file row: nothing is uploaded. */
+export type FileLinkInsert = {
+  client_id: string
+  folder: FileFolder
+  name: string
+  external_url: string
+  visibility?: Visibility
 }
 
 export interface FilesRepo {
   list(filter: FileFilter): Promise<FileRecord[]>
   /** Records the upload in Brand Assets. The mock keeps metadata only. */
   uploadBrandAsset(input: BrandAssetUpload): Promise<FileRecord>
+  /** Staff: records a Google Drive link in a folder. */
+  addLink(input: FileLinkInsert): Promise<FileRecord>
   remove(id: string): Promise<void>
 }
 
@@ -266,9 +304,13 @@ export interface SocialMetricsRepo {
   listDaily(filter: SocialMetricsFilter): Promise<SocialMetricDaily[]>
   /** Posts published in the range, highest reach first. */
   topPosts(filter: TopPostsFilter): Promise<SocialPost[]>
-  /** When the numbers were last pulled from the platforms. */
-  lastSyncedAt(filter: { client_id: string }): Promise<string>
+  /** The latest day that has numbers, or null when nothing has been synced yet. */
+  lastSyncedAt(filter: { client_id: string }): Promise<string | null>
+  /** Staff only: adds or replaces daily rows (one per client, platform and date). Returns how many. */
+  importDaily(rows: SocialMetricImport[]): Promise<number>
 }
+
+export type SocialMetricImport = Omit<SocialMetricDaily, 'project_id'>
 
 /** The columns a person fills in; everything else is set by the system. */
 export type LeadInsert = Pick<Lead, 'company'> & Partial<Omit<Lead, 'id' | 'company' | 'created_at' | 'converted_client_id'>>
@@ -323,6 +365,45 @@ export interface ActivityRepo {
   recent(filter?: ActivityFilter): Promise<ActivityEvent[]>
 }
 
+export type OnboardingGates = {
+  agreement_signed: boolean
+  first_invoice_paid: boolean
+}
+
+export type OnboardingItemPatch = Partial<Pick<OnboardingItem, 'status' | 'due_date' | 'title'>>
+
+export interface OnboardingRepo {
+  list(clientId: string): Promise<OnboardingItem[]>
+  generate(clientId: string, service: ServiceType): Promise<OnboardingItem[]>
+  updateItem(id: string, patch: OnboardingItemPatch): Promise<OnboardingItem>
+  submit(answers: Record<string, unknown>, doneItemIds?: string[]): Promise<Client>
+  gates(clientId: string): Promise<OnboardingGates>
+}
+
+export type DocumentInsert = Pick<ClientDocument, 'client_id' | 'kind' | 'title'> &
+  Partial<Pick<ClientDocument, 'file_id' | 'external_url' | 'status' | 'sent_at' | 'signed_at'>> & {
+    /** An uploaded file; Supabase stores it in the private vault and links it as `file_id`. */
+    file?: File
+  }
+
+export type DocumentPatch = Partial<
+  Pick<ClientDocument, 'kind' | 'title' | 'file_id' | 'external_url' | 'status' | 'sent_at' | 'signed_at'>
+>
+
+export interface DocumentsRepo {
+  list(clientId: string): Promise<ClientDocument[]>
+  create(input: DocumentInsert): Promise<ClientDocument>
+  update(id: string, patch: DocumentPatch): Promise<ClientDocument>
+  remove(id: string): Promise<void>
+}
+
+export type TemplatePatch = Partial<Pick<MessageTemplate, 'title' | 'subject' | 'body'>>
+
+export interface TemplatesRepo {
+  list(): Promise<MessageTemplate[]>
+  update(id: string, patch: TemplatePatch): Promise<MessageTemplate>
+}
+
 export interface DataLayer {
   auth: AuthRepo
   session: SessionRepo
@@ -343,5 +424,8 @@ export interface DataLayer {
   reminders: RemindersRepo
   aiDrafts: AiDraftsRepo
   activity: ActivityRepo
+  onboarding: OnboardingRepo
+  documents: DocumentsRepo
+  templates: TemplatesRepo
 }
 

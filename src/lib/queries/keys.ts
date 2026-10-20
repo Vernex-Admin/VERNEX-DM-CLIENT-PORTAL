@@ -7,6 +7,7 @@ export const R = {
   clientUsers: 'client_users',
   accountLead: 'account_lead',
   staff: 'staff',
+  assignments: 'assignments',
   projects: 'projects',
   milestones: 'milestones',
   deliverables: 'deliverables',
@@ -24,6 +25,10 @@ export const R = {
   leadActivity: 'lead_activity',
   reminders: 'reminders',
   aiDrafts: 'ai_drafts',
+  onboarding: 'onboarding',
+  onboardingGates: 'onboarding_gates',
+  documents: 'documents',
+  templates: 'templates',
 } as const
 
 export type ResourceKey = (typeof R)[keyof typeof R]

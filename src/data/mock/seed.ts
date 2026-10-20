@@ -21,6 +21,10 @@ import type {
   SocialMetricDaily,
   SocialPost,
   Tables,
+  OnboardingItemTemplate,
+  OnboardingItem,
+  ClientDocument,
+  MessageTemplate,
 } from '../../types/db'
 
 // Seed data for the mock data layer.
@@ -70,6 +74,8 @@ function clients(): Client[] {
       currency: 'INR',
       retainer_minor: rupees(15_000),
       retainer_months: 6,
+      service_type: 'both',
+      onboarding_answers: null,
       created_at: at(-75),
     },
     {
@@ -84,6 +90,8 @@ function clients(): Client[] {
       currency: 'INR',
       retainer_minor: rupees(12_000),
       retainer_months: 3,
+      service_type: null,
+      onboarding_answers: null,
       created_at: at(-48),
     },
   ]
@@ -113,7 +121,7 @@ function profiles(): Profile[] {
   })
 
   return [
-    person(founder, 'Boss Anandaa', 'anandaa@vernex.example', 'vernex_founder', null, '+919000000001'),
+    person(founder, 'Boss Anandaa', 'admin@vernex.in', 'vernex_founder', null, '+919789912805'),
     person(pm, 'Karthik Raj', 'karthik@vernex.example', 'vernex_pm', null, '+919000000002'),
     person(agkAdmin, 'Arun Kumar', 'arun@agkfitness.example', 'client_admin', agk, '+919000000011', true),
     // Cannot approve: use this profile to test the can_approve rule.
@@ -978,6 +986,154 @@ function withThumbnails(rows: Deliverable[]): Deliverable[] {
   )
 }
 
+export function onboardingItemTemplates(): OnboardingItemTemplate[] {
+  return [
+    { id: 'oit-1', service: "common", stage: "Sign-up", title: "Proposal sent", owner: "vernex", position: 1, due_offset_days: 0 },
+    { id: 'oit-2', service: "common", stage: "Sign-up", title: "Agreement sent", owner: "vernex", position: 2, due_offset_days: 1 },
+    { id: 'oit-3', service: "common", stage: "Sign-up", title: "Agreement signed", owner: "client", position: 3, due_offset_days: 3 },
+    { id: 'oit-4', service: "common", stage: "Sign-up", title: "First invoice sent", owner: "vernex", position: 4, due_offset_days: 1 },
+    { id: 'oit-5', service: "common", stage: "Sign-up", title: "First invoice paid", owner: "client", position: 5, due_offset_days: 7 },
+    { id: 'oit-6', service: "common", stage: "Welcome", title: "Welcome message and portal invite sent", owner: "vernex", position: 6, due_offset_days: 7 },
+    { id: 'oit-7', service: "common", stage: "Welcome", title: "Onboarding form and access request sent", owner: "vernex", position: 7, due_offset_days: 8 },
+    { id: 'oit-8', service: "common", stage: "Welcome", title: "Setup form completed in the portal", owner: "client", position: 8, due_offset_days: 10 },
+    { id: 'oit-9', service: "common", stage: "Kickoff", title: "Kickoff call held (45 min)", owner: "vernex", position: 9, due_offset_days: 12 },
+    { id: 'oit-10', service: "common", stage: "Kickoff", title: "Kickoff summary sent and milestones added", owner: "vernex", position: 10, due_offset_days: 13 },
+    { id: 'oit-11', service: "common", stage: "Kickoff", title: "First deliverables sent for approval", owner: "vernex", position: 11, due_offset_days: 21 },
+    { id: 'oit-12', service: "social", stage: "Access", title: "Instagram switched to Professional and linked to the Facebook Page", owner: "client", position: 1, due_offset_days: 10 },
+    { id: 'oit-13', service: "social", stage: "Access", title: "Vernex added as partner in Meta Business Settings (Page, Instagram, ad account, pixel)", owner: "client", position: 2, due_offset_days: 10 },
+    { id: 'oit-14', service: "social", stage: "Access", title: "Ad account set up with the client's own payment method", owner: "client", position: 3, due_offset_days: 10 },
+    { id: 'oit-15', service: "social", stage: "Access", title: "Meta Pixel or Conversions API on the website", owner: "vernex", position: 4, due_offset_days: 14 },
+    { id: 'oit-16', service: "social", stage: "Access", title: "Google Business Profile manager access", owner: "client", position: 5, due_offset_days: 10 },
+    { id: 'oit-17', service: "social", stage: "Access", title: "Instagram and Facebook connected in the portal", owner: "client", position: 6, due_offset_days: 10 },
+    { id: 'oit-18', service: "social", stage: "Brand", title: "Logo, brand colours and fonts uploaded to Brand Assets", owner: "client", position: 7, due_offset_days: 10 },
+    { id: 'oit-19', service: "social", stage: "Brand", title: "20+ real photos and videos uploaded", owner: "client", position: 8, due_offset_days: 12 },
+    { id: 'oit-20', service: "social", stage: "Brand", title: "Offers, prices and USPs shared; what never to say", owner: "client", position: 9, due_offset_days: 10 },
+    { id: 'oit-21', service: "social", stage: "Brand", title: "Top 3 competitors and 3 admired accounts shared", owner: "client", position: 10, due_offset_days: 10 },
+    { id: 'oit-22', service: "social", stage: "Brand", title: "Approver named; 3-working-day turnaround agreed", owner: "client", position: 11, due_offset_days: 10 },
+    { id: 'oit-23', service: "social", stage: "Brand", title: "Shoot day booked (if Vernex creates video)", owner: "vernex", position: 12, due_offset_days: 14 },
+    { id: 'oit-24', service: "social", stage: "Month 1", title: "Baseline recorded: followers, reach, leads, CPL, Google rating", owner: "vernex", position: 13, due_offset_days: 10 },
+    { id: 'oit-25', service: "social", stage: "Month 1", title: "Account audit with the top 5 fixes", owner: "vernex", position: 14, due_offset_days: 14 },
+    { id: 'oit-26', service: "social", stage: "Month 1", title: "Bio, highlights and link in bio cleaned up", owner: "vernex", position: 15, due_offset_days: 14 },
+    { id: 'oit-27', service: "social", stage: "Month 1", title: "Content pillars and 30-day calendar sent for approval", owner: "vernex", position: 16, due_offset_days: 17 },
+    { id: 'oit-28', service: "social", stage: "Month 1", title: "Ad campaign structure and first creatives sent for approval", owner: "vernex", position: 17, due_offset_days: 17 },
+    { id: 'oit-29', service: "social", stage: "Month 1", title: "Lead handling agreed: who answers enquiries, how fast", owner: "vernex", position: 18, due_offset_days: 14 },
+    { id: 'oit-30', service: "social", stage: "Month 1", title: "KPI targets agreed in writing against the baseline", owner: "vernex", position: 19, due_offset_days: 14 },
+    { id: 'oit-31', service: "website", stage: "Discovery", title: "Discovery questionnaire completed", owner: "client", position: 1, due_offset_days: 7 },
+    { id: 'oit-32', service: "website", stage: "Discovery", title: "Brief signed off", owner: "vernex", position: 2, due_offset_days: 9 },
+    { id: 'oit-33', service: "website", stage: "Access", title: "Domain registrar or DNS access shared", owner: "client", position: 3, due_offset_days: 10 },
+    { id: 'oit-34', service: "website", stage: "Access", title: "Hosting or platform account set up in the client's name", owner: "client", position: 4, due_offset_days: 10 },
+    { id: 'oit-35', service: "website", stage: "Access", title: "Business email set up for enquiry forms", owner: "client", position: 5, due_offset_days: 10 },
+    { id: 'oit-36', service: "website", stage: "Access", title: "GA4 and Search Console owned by client, Vernex added", owner: "client", position: 6, due_offset_days: 10 },
+    { id: 'oit-37', service: "website", stage: "Access", title: "Third-party tools in the client's name (booking, payments, WhatsApp)", owner: "client", position: 7, due_offset_days: 12 },
+    { id: 'oit-38', service: "website", stage: "Content", title: "Sitemap and page list agreed", owner: "vernex", position: 8, due_offset_days: 12 },
+    { id: 'oit-39', service: "website", stage: "Content", title: "Copy supplied or Vernex copy approved", owner: "client", position: 9, due_offset_days: 14 },
+    { id: 'oit-40', service: "website", stage: "Content", title: "Photos supplied", owner: "client", position: 10, due_offset_days: 14 },
+    { id: 'oit-41', service: "website", stage: "Design", title: "Home page design approved", owner: "client", position: 11, due_offset_days: 21 },
+    { id: 'oit-42', service: "website", stage: "Design", title: "Inner pages approved; design-approval invoice paid", owner: "client", position: 12, due_offset_days: 24 },
+    { id: 'oit-43', service: "website", stage: "Build", title: "Staging site reviewed; bug list in the portal", owner: "client", position: 13, due_offset_days: 32 },
+    { id: 'oit-44', service: "website", stage: "Build", title: "Staging approved; launch invoice paid", owner: "client", position: 14, due_offset_days: 35 },
+    { id: 'oit-45', service: "website", stage: "Launch", title: "Launch checklist passed (mobile, speed, forms, SSL, redirects, GA4, pixel, backup)", owner: "vernex", position: 15, due_offset_days: 38 },
+    { id: 'oit-46', service: "website", stage: "Launch", title: "Site live and DNS switched", owner: "vernex", position: 16, due_offset_days: 40 },
+    { id: 'oit-47', service: "website", stage: "Launch", title: "Credentials and how-to video handed over", owner: "vernex", position: 17, due_offset_days: 41 },
+    { id: 'oit-48', service: "website", stage: "Launch", title: "Maintenance plan offered; 30-day warranty started", owner: "vernex", position: 18, due_offset_days: 41 },
+  ]
+}
+
+export function messageTemplates(): MessageTemplate[] {
+  return [
+    { id: 'mt-1', key: "proposal", title: "Proposal", channel: "email", subject: "{{client_name}} growth plan: next 90 days", body: "Hi {{contact_name}},\n\nThank you for the time on [day]. As promised, the plan is attached.\n\nWhat we heard:\n- [Problem 1, in their words]\n- [Problem 2]\n\nWhat we'll do:\n- Month 1: audit, strategy and setup ([key items])\n- Month 2: launch and optimise ([key items])\n- Month 3 onward: scale what works\n\nWhat we'll measure: [KPI 1], [KPI 2], against your current baseline of [baseline].\n\nInvestment: {{amount}}/month + GST, for a [6]-month term. Ad spend is paid directly to Meta/Google and is separate.\n\nThe proposal is valid until [date]. Happy to walk through it on a 15-minute call this week.\n\nBoss Anandaa\nFounder, Vernex \u00b7 vernex.in", position: 1, updated_at: at(-10) },
+    { id: 'mt-2', key: "proposal_follow_up", title: "Proposal follow-up", channel: "whatsapp", subject: null, body: "Hi {{contact_name}}, Boss from Vernex. Did you get a chance to look at the plan? Happy to adjust the scope if anything doesn't fit. Is a 15-minute call on [day] at [time] okay?", position: 2, updated_at: at(-10) },
+    { id: 'mt-3', key: "agreement", title: "Agreement", channel: "email", subject: "Agreement: Vernex x {{client_name}}", body: "Hi {{contact_name}},\n\nGreat to have you on board. Attached is our services agreement, covering the scope, fees and terms we discussed.\n\nOnce it's signed and the first invoice is cleared, we start the same week. The invoice is also attached, with a payment link.\n\nAny questions on the agreement, just reply here.\n\nBoss Anandaa", position: 3, updated_at: at(-10) },
+    { id: 'mt-4', key: "welcome_whatsapp", title: "Welcome (WhatsApp)", channel: "whatsapp", subject: null, body: "Welcome to Vernex, {{contact_name}}! We're excited to grow {{client_name}} with you.\n\nHere's what happens next:\n1. You'll get an email to sign in to your Vernex portal. Everything lives there: approvals, files, reports and invoices.\n2. Tomorrow we'll send a short onboarding form and the access we need.\n3. Kickoff call: {{kickoff_time}}. 45 minutes.\n\nYour account lead is {{lead_name}}, reachable on this number.", position: 4, updated_at: at(-10) },
+    { id: 'mt-5', key: "welcome_email", title: "Welcome email with portal invite", channel: "email", subject: "Welcome to Vernex: your client portal is ready", body: "Hi {{contact_name}},\n\nYour Vernex portal is live: {{portal_link}}\nSign in with this email address. No password needed; we send you a link.\n\nIn the portal you can:\n- approve or request changes on every post, ad and page\n- see your leads, reach and spend in one place\n- download your files and invoices\n- write to me directly through \"Note to the founder\"\n\nKickoff: {{kickoff_time}}, [Google Meet link].\n\nBoss Anandaa", position: 5, updated_at: at(-10) },
+    { id: 'mt-6', key: "onboarding_access", title: "Onboarding form and access request", channel: "email", subject: "Before kickoff: 15 minutes of setup", body: "Hi {{contact_name}},\n\nTo hit the ground running, please complete this before [date]:\n\n1. Setup form (10 min): sign in at {{portal_link}} and fill in \"Let's get set up\".\n2. Access: the step-by-step list is in the same form.\n3. Upload your logo, brand colours and 10+ photos to Brand Assets in the portal.\n\nWe never ask for your passwords. All access is given through Meta Business, Google and your hosting account's own sharing.\n\nThanks,\n{{pm_name}}, Vernex", position: 6, updated_at: at(-10) },
+    { id: 'mt-7', key: "kickoff_summary", title: "Kickoff summary", channel: "email", subject: "Kickoff summary and next steps", body: "Hi {{contact_name}},\n\nThank you for today. What we agreed:\n- Goals for 90 days: [goal 1], [goal 2]\n- Baseline today: [numbers]\n- First deliverables: [items], for your approval by [date]\n- Your actions: [items], by [date]\n- Our next check-in: [day, time]\n\nThe full plan is in your portal under Dashboard.\n\n{{pm_name}}", position: 7, updated_at: at(-10) },
+    { id: 'mt-8', key: "invoice", title: "Invoice", channel: "email", subject: "Invoice {{invoice_number}}: Vernex, {{month}}", body: "Hi {{contact_name}},\n\nPlease find invoice {{invoice_number}} for {{amount}}, due on {{due_date}}.\n\nPay online: {{payment_link}}\nOr bank transfer: [Account name], A/c [no.], IFSC [code], UPI [id]\n\nThank you,\nVernex Accounts", position: 8, updated_at: at(-10) },
+    { id: 'mt-9', key: "payment_reminder", title: "Payment reminder", channel: "whatsapp", subject: null, body: "Hi {{contact_name}}, a quick note that invoice {{invoice_number}} for {{amount}} is due on {{due_date}}. Pay here: {{payment_link}}. Thank you!", position: 9, updated_at: at(-10) },
+    { id: 'mt-10', key: "monthly_report", title: "Monthly report", channel: "email", subject: "{{client_name}}: {{month}} results and next month's plan", body: "Hi {{contact_name}},\n\nThe headline: [one sentence with the main number].\n\nWhat worked: [1-2 points]\nWhat we're changing: [1-2 points]\nNext month: [plan]\n\nFull report in your portal: {{portal_link}}\n\n{{pm_name}}", position: 10, updated_at: at(-10) },
+    { id: 'mt-11', key: "renewal", title: "Renewal", channel: "email", subject: "The next 6 months for {{client_name}}", body: "Hi {{contact_name}},\n\nThanks for the chat. Since we started: [baseline] -> [current numbers].\n\nFor the next term we recommend: [plan], at {{amount}}/month + GST. The new term would start on [date]. If you're happy, I'll send the renewal agreement this week.\n\nBoss Anandaa", position: 11, updated_at: at(-10) },
+  ]
+}
+
+export function documents(): ClientDocument[] {
+  return [
+    {
+      id: 'doc-agk-1',
+      client_id: agk,
+      kind: 'agreement',
+      title: 'AGK Fitness Services Agreement',
+      file_id: null,
+      external_url: 'https://drive.google.com/file/d/agk-agreement/view',
+      status: 'signed',
+      sent_at: at(-74),
+      signed_at: at(-72),
+      created_at: at(-75),
+    },
+    {
+      id: 'doc-agk-2',
+      client_id: agk,
+      kind: 'proposal',
+      title: 'AGK Fitness 90-Day Growth Plan',
+      file_id: null,
+      external_url: 'https://drive.google.com/file/d/agk-proposal/view',
+      status: 'signed',
+      sent_at: at(-75),
+      signed_at: at(-73),
+      created_at: at(-76),
+    },
+    {
+      id: 'doc-raack-1',
+      client_id: raack,
+      kind: 'agreement',
+      title: 'Raack Dance Academy Services Agreement',
+      file_id: null,
+      external_url: 'https://drive.google.com/file/d/raack-agreement/view',
+      status: 'sent',
+      sent_at: at(-45),
+      signed_at: null,
+      created_at: at(-47),
+    },
+    {
+      id: 'doc-raack-2',
+      client_id: raack,
+      kind: 'proposal',
+      title: 'Raack Growth Strategy',
+      file_id: null,
+      external_url: null,
+      status: 'draft',
+      sent_at: null,
+      signed_at: null,
+      created_at: at(-48),
+    },
+  ]
+}
+
+export function agkOnboardingItems(): OnboardingItem[] {
+  const templates = onboardingItemTemplates()
+  // generate for 'both' matches SQL generate_onboarding order:
+  // common (0), social (1), website (2), then template position
+  const filtered = templates.filter(t => t.service === 'common' || t.service === 'social' || t.service === 'website')
+  const orderRank = (s: string) => s === 'common' ? 0 : s === 'social' ? 1 : 2
+  filtered.sort((a, b) => orderRank(a.service) - orderRank(b.service) || a.position - b.position)
+  return filtered.map((t, idx) => {
+    // First 5 common items done, plus a couple social items done
+    const isDone = (t.service === 'common' && t.position <= 5) || (t.service === 'social' && (t.position === 1 || t.position === 7))
+    return {
+      id: `oi-agk-${idx + 1}`,
+      client_id: agk,
+      service: t.service,
+      stage: t.stage,
+      title: t.title,
+      owner: t.owner,
+      status: isDone ? 'done' : 'todo',
+      position: idx + 1,
+      due_date: day(t.due_offset_days - 60),
+      completed_at: isDone ? at(-65) : null,
+      created_at: at(-75),
+    }
+  })
+}
+
 export type MockDatabase = { [K in keyof Tables]: Tables[K][] }
 
 export function createSeed(): MockDatabase {
@@ -1005,5 +1161,9 @@ export function createSeed(): MockDatabase {
     lead_activity: leadActivity(),
     reminders: reminders(),
     ai_drafts: aiDrafts(),
+    onboarding_item_templates: onboardingItemTemplates(),
+    onboarding_items: agkOnboardingItems(),
+    documents: documents(),
+    message_templates: messageTemplates(),
   }
 }

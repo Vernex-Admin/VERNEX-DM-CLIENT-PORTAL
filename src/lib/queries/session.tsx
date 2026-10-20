@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { data } from '../../data'
 import type { Profile } from '../../types/db'
@@ -21,13 +23,21 @@ export function useSwitchableProfiles() {
   })
 }
 
-/** After any sign-in or sign-out: nothing cached for the previous user may be shown to the next one. */
+/**
+ * After any sign-in or sign-out: nothing cached for the previous user may be shown to the next one.
+ * In-flight requests are cancelled first so a late answer cannot refill the cache, and finished
+ * mutation results (which can hold a client's data) are dropped too.
+ */
+async function dropCachedData(queryClient: QueryClient) {
+  await queryClient.cancelQueries()
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== R.session })
+  queryClient.getMutationCache().clear()
+  await queryClient.invalidateQueries()
+}
+
 function useRefreshSession() {
   const queryClient = useQueryClient()
-  return async () => {
-    queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== R.session })
-    await queryClient.invalidateQueries()
-  }
+  return () => dropCachedData(queryClient)
 }
 
 /** Development only: sign in as a seeded profile, or pass null to sign out. */
@@ -39,6 +49,19 @@ export function useSwitchProfile() {
     onSuccess: async (profile) => {
       queryClient.setQueryData<Profile | null>(currentProfileKey, profile)
       await refresh()
+    },
+  })
+}
+
+/** Realtime sign in with email and password. */
+export function useSignInWithPassword() {
+  const queryClient = useQueryClient()
+  const refresh = useRefreshSession()
+  return useMutation({
+    mutationFn: (input: { email: string; password?: string }) => data.auth.signInWithPassword(input),
+    onSuccess: async () => {
+      await refresh()
+      await queryClient.invalidateQueries({ queryKey: currentProfileKey })
     },
   })
 }
@@ -70,7 +93,8 @@ export function useSignOut() {
   const refresh = useRefreshSession()
   return useMutation({
     mutationFn: () => data.auth.signOut(),
-    onSuccess: async () => {
+    // onSettled, not onSuccess: even if the sign-out request fails, this screen must not keep the data.
+    onSettled: async () => {
       queryClient.setQueryData<Profile | null>(currentProfileKey, null)
       await refresh()
     },
@@ -80,6 +104,18 @@ export function useSignOut() {
 /** Makes the signed-in profile available to useCan() and useSessionProfile(). */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const { data: profile } = useCurrentProfile()
+  const queryClient = useQueryClient()
+
+  // A different person signing in, or the session ending (also from another tab): nothing cached
+  // for the last person may stay, and the session query is read again.
+  useEffect(
+    () =>
+      data.auth.onAuthChange(() => {
+        void dropCachedData(queryClient)
+      }),
+    [queryClient],
+  )
+
   return <SessionContext value={profile ?? null}>{children}</SessionContext>
 }
 

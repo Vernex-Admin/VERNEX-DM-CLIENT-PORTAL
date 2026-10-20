@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router'
-import { useCurrentProfile } from '../lib/queries'
+import { useClient, useCurrentProfile, useOnboarding } from '../lib/queries'
 import { audienceOf } from '../lib/permissions'
 import type { Audience } from '../lib/permissions'
 import { Skeleton } from './ui'
@@ -9,7 +9,7 @@ export const HOME_PATH: Record<Audience, string> = { client: '/', staff: '/admin
 
 function useAudience() {
   const { data: profile, isPending } = useCurrentProfile()
-  return { audience: audienceOf(profile), isPending }
+  return { audience: audienceOf(profile), isPending, profile }
 }
 
 function PageLoading() {
@@ -47,8 +47,27 @@ export const RequireStaff = () => <RequireAudience audience="staff" />
 /** Wraps a login page: signed-in users are sent on to where they were going, or to their home. */
 export function RedirectIfSignedIn() {
   const location = useLocation()
-  const { audience, isPending } = useAudience()
-  if (isPending) return <PageLoading />
-  if (audience) return <Navigate to={returnPath((location.state as { from?: unknown } | null)?.from, audience)} replace />
+  const { audience, isPending, profile } = useAudience()
+  const clientId = profile?.client_id ?? undefined
+  const clientQuery = useClient(clientId)
+  const onboardingQuery = useOnboarding(clientId)
+
+  if (isPending || (audience === 'client' && (clientQuery.isPending || onboardingQuery.isPending))) {
+    return <PageLoading />
+  }
+
+  if (audience) {
+    const rawFrom = (location.state as { from?: unknown } | null)?.from
+    let target = returnPath(rawFrom, audience)
+    if (audience === 'client' && (target === '/' || !rawFrom)) {
+      const client = clientQuery.data
+      const hasChecklist = (onboardingQuery.data ?? []).length > 0
+      const answersEmpty = !client?.onboarding_answers || Object.keys(client.onboarding_answers).length === 0
+      if (hasChecklist && answersEmpty) {
+        target = '/setup'
+      }
+    }
+    return <Navigate to={target} replace />
+  }
   return <Outlet />
 }

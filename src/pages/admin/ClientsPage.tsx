@@ -104,7 +104,29 @@ export default function ClientsPage() {
       header: 'Last activity',
       cell: ({ lastActivity }) => (lastActivity ? relativeTime(lastActivity) : 'None yet'),
     },
-    { key: 'actions', header: 'Actions', cell: ({ client }) => <DeleteButton client={client} onDelete={setDeleting} /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: ({ client }) => (
+        <div className="flex items-center gap-1">
+          <Link
+            to={`/admin/clients/${client.id}/agreement`}
+            className="inline-flex min-h-[28px] items-center rounded px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
+            title="Generate Agreement"
+          >
+            Agreement
+          </Link>
+          <Link
+            to={`/admin/clients/${client.id}/invoice`}
+            className="inline-flex min-h-[28px] items-center rounded px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
+            title="Generate Invoice"
+          >
+            Invoice
+          </Link>
+          <DeleteButton client={client} onDelete={setDeleting} />
+        </div>
+      ),
+    },
   ]
 
   return (

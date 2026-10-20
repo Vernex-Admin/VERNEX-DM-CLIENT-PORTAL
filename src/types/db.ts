@@ -172,6 +172,27 @@ export type PreviewKind = (typeof PREVIEW_KINDS)[number]
 export type RevisionPriority = 'normal' | 'urgent'
 export type ApprovedVia = 'portal' | 'offline_proxy'
 
+export const SERVICE_TYPES = ['social', 'website', 'both'] as const
+export type ServiceType = (typeof SERVICE_TYPES)[number]
+
+export const ONBOARDING_SERVICES = ['common', 'social', 'website'] as const
+export type OnboardingService = (typeof ONBOARDING_SERVICES)[number]
+
+export const ONBOARDING_OWNERS = ['vernex', 'client'] as const
+export type OnboardingOwner = (typeof ONBOARDING_OWNERS)[number]
+
+export const ONBOARDING_STATUSES = ['todo', 'done', 'skipped'] as const
+export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number]
+
+export const DOCUMENT_KINDS = ['proposal', 'agreement', 'other'] as const
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
+
+export const DOCUMENT_STATUSES = ['draft', 'sent', 'signed'] as const
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
+
+export const TEMPLATE_CHANNELS = ['whatsapp', 'email'] as const
+export type TemplateChannel = (typeof TEMPLATE_CHANNELS)[number]
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -190,6 +211,9 @@ export type Client = {
   /** Monthly retainer, if the client is on one. */
   retainer_minor: Minor | null
   retainer_months: number | null
+  /** Onboarding (playbook): which checklist this client gets, and their setup-form answers. */
+  service_type: ServiceType | null
+  onboarding_answers: Record<string, unknown> | null
   created_at: Timestamp
 }
 
@@ -527,6 +551,57 @@ export type AiDraft = {
   updated_at: Timestamp
 }
 
+/** The master checklist. generate_onboarding() copies the matching rows to a client. */
+export type OnboardingItemTemplate = {
+  id: UUID
+  service: OnboardingService
+  stage: string
+  title: string
+  owner: OnboardingOwner
+  position: number
+  due_offset_days: number
+}
+
+export type OnboardingItem = {
+  id: UUID
+  client_id: UUID
+  service: OnboardingService
+  stage: string
+  title: string
+  owner: OnboardingOwner
+  status: OnboardingStatus
+  position: number
+  due_date: DateString | null
+  completed_at: Timestamp | null
+  created_at: Timestamp
+}
+
+/** Proposals and agreements. Clients see them once sent; never drafts. Table: documents. */
+export type ClientDocument = {
+  id: UUID
+  client_id: UUID
+  kind: DocumentKind
+  title: string
+  file_id: UUID | null
+  external_url: string | null
+  status: DocumentStatus
+  sent_at: Timestamp | null
+  signed_at: Timestamp | null
+  created_at: Timestamp
+}
+
+/** The 11 playbook messages. Body uses {{merge_fields}}. */
+export type MessageTemplate = {
+  id: UUID
+  key: string
+  title: string
+  channel: TemplateChannel
+  subject: string | null
+  body: string
+  position: number
+  updated_at: Timestamp
+}
+
 export type Tables = {
   clients: Client
   profiles: Profile
@@ -550,6 +625,10 @@ export type Tables = {
   lead_activity: LeadActivity
   reminders: Reminder
   ai_drafts: AiDraft
+  onboarding_item_templates: OnboardingItemTemplate
+  onboarding_items: OnboardingItem
+  documents: ClientDocument
+  message_templates: MessageTemplate
 }
 
 // ---------------------------------------------------------------------------
@@ -568,7 +647,16 @@ export type Update<T> = Partial<Omit<T, Extract<Generated | 'client_id', keyof T
 
 export type ClientInsert = Insert<
   Client,
-  'logo_url' | 'industry' | 'city' | 'gstin' | 'billing_email' | 'currency' | 'retainer_minor' | 'retainer_months'
+  | 'logo_url'
+  | 'industry'
+  | 'city'
+  | 'gstin'
+  | 'billing_email'
+  | 'currency'
+  | 'retainer_minor'
+  | 'retainer_months'
+  | 'service_type'
+  | 'onboarding_answers'
 >
 export type ProfileInsert = Insert<Profile, 'phone_e164' | 'avatar_url' | 'can_approve' | 'is_active' | 'notification_prefs'>
 export type ProjectInsert = Insert<

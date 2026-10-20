@@ -3,13 +3,14 @@ import type { DragEvent } from 'react'
 import { Circle, CircleCheck, Download, ExternalLink, File as FileIcon, FileText, FolderOpen, Image as ImageIcon, Upload } from 'lucide-react'
 import { Icon } from '../../components/Icon'
 import { QueryError } from '../../components/QueryError'
-import { Button, Card, CardBody, CardHeader, EmptyState, Skeleton, Tabs, useToast } from '../../components/ui'
+import { Button, Card, CardBody, CardHeader, EmptyState, Pill, Skeleton, Tabs, useToast } from '../../components/ui'
 import { cn } from '../../lib/cn'
 import { brandChecklist, checklistPercent } from '../../lib/brandChecklist'
 import { formatDate } from '../../lib/dates'
+import { isSafeLink } from '../../lib/links'
 import { useCan } from '../../lib/permissions'
-import { useCurrentProfile, useFiles, useUploadBrandAsset } from '../../lib/queries'
-import type { FileFolder, FileRecord } from '../../types/db'
+import { useCurrentProfile, useDocuments, useFiles, useUploadBrandAsset } from '../../lib/queries'
+import type { ClientDocument, FileFolder, FileRecord } from '../../types/db'
 
 type TabFolder = Extract<FileFolder, 'brand_assets' | 'rendered_ads' | 'documents' | 'invoices'>
 
@@ -55,6 +56,7 @@ function Folder({ clientId, folder, empty }: { clientId: string | undefined; fol
     <div className="flex flex-col gap-4">
       {isBrand && clientId && <Uploader clientId={clientId} />}
       {isBrand && <Checklist files={files.data} />}
+      {folder === 'documents' && <SentDocuments clientId={clientId} />}
 
       {files.isPending ? (
         <FilesSkeleton />
@@ -72,6 +74,55 @@ function Folder({ clientId, folder, empty }: { clientId: string | undefined; fol
         </ul>
       )}
     </div>
+  )
+}
+
+const DOCUMENT_KIND_LABEL: Record<ClientDocument['kind'], string> = {
+  proposal: 'Proposal',
+  agreement: 'Agreement',
+  other: 'Document',
+}
+
+// Proposals and agreements Vernex has sent. Drafts never reach the client (the data layer filters them).
+function SentDocuments({ clientId }: { clientId: string | undefined }) {
+  const documents = useDocuments(clientId)
+  if (documents.isPending || documents.isError || documents.data.length === 0) return null
+  return (
+    <ul aria-label="Proposals and agreements" className="flex flex-col gap-2">
+      {documents.data.map((doc) => (
+        <li key={doc.id} className="flex items-center gap-3 rounded-card border border-rule bg-surface p-3">
+          <div className="flex size-[44px] shrink-0 items-center justify-center rounded-field border border-rule bg-paper">
+            <Icon icon={FileText} size={20} className="text-ink-muted" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate leading-snug font-medium" title={doc.title}>
+              {doc.title}
+            </p>
+            <p className="text-sm text-ink-muted">
+              {DOCUMENT_KIND_LABEL[doc.kind]}
+              {doc.signed_at
+                ? ` · Signed ${formatDate(doc.signed_at)}`
+                : doc.sent_at
+                  ? ` · Sent ${formatDate(doc.sent_at)}`
+                  : ''}
+            </p>
+          </div>
+          <Pill tone={doc.status === 'signed' ? 'ok' : 'info'}>{doc.status === 'signed' ? 'Signed' : 'Sent'}</Pill>
+          {isSafeLink(doc.external_url) && (
+            <a
+              href={doc.external_url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open ${doc.title}`}
+              className={actionLink}
+            >
+              <Icon icon={ExternalLink} size={16} />
+              <span className="max-sm:sr-only">Open</span>
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -102,7 +153,7 @@ function FileItem({ file }: { file: FileRecord }) {
         <p className="text-sm text-ink-muted">{meta}</p>
         {file.external_url && <p className="text-sm text-ink-muted">Opens in Google Drive</p>}
       </div>
-      {file.external_url ? (
+      {isSafeLink(file.external_url) ? (
         <a
           href={file.external_url}
           target="_blank"
@@ -148,6 +199,7 @@ function Uploader({ clientId }: { clientId: string }) {
           mime_type: file.type || undefined,
           size_bytes: file.size,
           url: URL.createObjectURL(file),
+          file,
         })
       }
       toast({ title: files.length === 1 ? 'File uploaded' : `${files.length} files uploaded`, tone: 'ok' })

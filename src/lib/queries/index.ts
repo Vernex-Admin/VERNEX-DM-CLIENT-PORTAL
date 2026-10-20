@@ -6,6 +6,8 @@ export * from './clients'
 export * from './deliverables'
 export * from './projects'
 export * from './session'
+export * from './onboarding'
+export * from './staff'
 export { keys, R } from './keys'
 
 // Types screens need for hook arguments and error handling.
@@ -28,5 +30,10 @@ export type {
   SocialMetricsFilter,
   TopPostsFilter,
   MyProfilePatch,
+  DocumentInsert,
+  DocumentPatch,
+  OnboardingGates,
+  OnboardingItemPatch,
+  TemplatePatch,
 } from '../../data'
 export type { ActivityEvent, ActivityKind } from '../../data'
