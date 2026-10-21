@@ -4,7 +4,7 @@ import { audienceOf } from '../lib/permissions'
 import type { Audience } from '../lib/permissions'
 import { Skeleton } from './ui'
 
-export const LOGIN_PATH: Record<Audience, string> = { client: '/login', staff: '/admin/login' }
+export const LOGIN_PATH: Record<Audience, string> = { client: '/login', staff: '/login' }
 export const HOME_PATH: Record<Audience, string> = { client: '/', staff: '/admin' }
 
 function useAudience() {

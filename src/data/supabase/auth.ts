@@ -24,44 +24,50 @@ function authError(error: { message: string }): DataError {
 
 export const supabaseAuth: AuthRepo = {
   async getSession() {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('vernex_admin_active') === 'true') {
-      return {
-        user: { id: '00000000-0000-0000-0000-000000000001', email: 'admin@vernex.in', user_metadata: { full_name: 'Boss Anandaa' } },
-        expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
-      }
-    }
     const { data, error } = await supabase().auth.getSession()
     if (error) throw authError(error)
     return data.session ? toSession(data.session) : null
   },
 
+  async signInWithIdentifier({ identifier, password }) {
+    const value = identifier.trim()
+    const isEmail = /^\S+@\S+\.\S+$/.test(value)
+    if (!isEmail && !/^[a-z0-9-]{6,64}$/i.test(value)) {
+      throw new DataError('invalid', 'Enter a valid Client Code or email address.')
+    }
+    if (!password) throw new DataError('invalid', 'Enter your password.')
+
+    const { data, error } = await supabase().functions.invoke('login-with-identifier', {
+      body: { identifier: isEmail ? value.toLowerCase() : value.toUpperCase(), password },
+    })
+    let serverMessage: string | undefined
+    if (error?.context instanceof Response) {
+      try {
+        const body = await error.context.json() as { error?: unknown }
+        if (typeof body.error === 'string') serverMessage = body.error
+      } catch {
+        // Use the generic message when the Edge Function response isn't JSON.
+      }
+    }
+    if (error || !data?.access_token || !data?.refresh_token) {
+      throw new DataError('invalid', serverMessage || 'Invalid identifier or password. Try again.')
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase().auth.setSession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    })
+    if (sessionError) throw authError(sessionError)
+    if (!sessionData.session) throw new DataError('invalid', 'Could not start your session. Try again.')
+    return toSession(sessionData.session)
+  },
+
   async signInWithPassword({ email, password }) {
     const address = email.trim().toLowerCase()
-    // 1. Check Supabase Auth password sign-in
-    try {
-      const { data, error } = await supabase().auth.signInWithPassword({
-        email: address,
-        password: password || '',
-      })
-      if (!error && data?.session) {
-        return toSession(data.session)
-      }
-    } catch {
-      // Fallback to verified admin credential check
-    }
-
-    // 2. Verified admin credentials
-    if (address === 'admin@vernex.in' && password === 'admin@123') {
-      try {
-        localStorage.setItem('vernex_admin_active', 'true')
-      } catch {}
-      return {
-        user: { id: '00000000-0000-0000-0000-000000000001', email: 'admin@vernex.in', user_metadata: { full_name: 'Boss Anandaa' } },
-        expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
-      }
-    }
-
-    throw new DataError('invalid', 'Invalid credentials. Please enter valid email and password.')
+    const { data, error } = await supabase().auth.signInWithPassword({ email: address, password: password || '' })
+    if (error) throw authError(error)
+    if (!data.session) throw new DataError('invalid', 'Invalid credentials. Please try again.')
+    return toSession(data.session)
   },
 
   async signInWithOtp({ email }) {
@@ -87,9 +93,6 @@ export const supabaseAuth: AuthRepo = {
 
   async signOut() {
     clearReturnPath()
-    try {
-      localStorage.removeItem('vernex_admin_active')
-    } catch {}
     const { error } = await supabase().auth.signOut()
     if (error) throw authError(error)
   },
@@ -117,50 +120,16 @@ export const supabaseAuth: AuthRepo = {
 export const supabaseSession: SessionRepo = {
   async getCurrentProfile() {
     const sb = supabase()
-    const isAdminActive = typeof localStorage !== 'undefined' && localStorage.getItem('vernex_admin_active') === 'true'
-    
-    // First, check if Supabase has a session
     const { data: sessionData } = await sb.auth.getSession()
-    if (sessionData.session) {
-      const { data, error } = await sb
-        .from('profiles')
-        .select('*')
-        .eq('user_id', sessionData.session.user.id)
-        .maybeSingle()
-      if (!error && data && (data as Profile).is_active) {
-        return data as Profile
-      }
-    }
-
-    // If verified admin session active
-    if (isAdminActive) {
-      // Check if profiles table has admin@vernex.in
-      try {
-        const { data } = await sb
-          .from('profiles')
-          .select('*')
-          .eq('email', 'admin@vernex.in')
-          .maybeSingle()
-        if (data) return data as Profile
-      } catch {}
-
-      return {
-        id: '00000000-0000-0000-0000-000000000001',
-        client_id: null,
-        email: 'admin@vernex.in',
-        full_name: 'Boss Anandaa',
-        phone_e164: '+919789912805',
-        avatar_url: null,
-        role: 'vernex_founder',
-        can_approve: true,
-        is_active: true,
-        notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
-        created_at: new Date().toISOString(),
-      } as Profile
-    }
-
     if (!sessionData.session) return null
-    return null
+    const { data, error } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('user_id', sessionData.session.user.id)
+      .maybeSingle()
+    if (error) throw toDataError(error)
+    if (!data || !(data as Profile).is_active) return null
+    return data as Profile
   },
 
   listSwitchableProfiles: () => Promise.resolve([]),
@@ -170,22 +139,6 @@ export const supabaseSession: SessionRepo = {
 
 /** The signed-in person's own profile, or a DataError when signed out. */
 export async function requireProfile(): Promise<Profile> {
-  const isAdminActive = typeof localStorage !== 'undefined' && localStorage.getItem('vernex_admin_active') === 'true'
-  if (isAdminActive) {
-    return {
-      id: '00000000-0000-0000-0000-000000000001',
-      client_id: null,
-      email: 'admin@vernex.in',
-      full_name: 'Boss Anandaa',
-      phone_e164: '+919789912805',
-      avatar_url: null,
-      role: 'vernex_founder',
-      can_approve: true,
-      is_active: true,
-      notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
-      created_at: new Date().toISOString(),
-    } as Profile
-  }
   const { data: sessionData } = await supabase().auth.getSession()
   const userId = sessionData.session?.user.id
   if (!userId) throw new DataError('signed_out', 'You are signed out.')

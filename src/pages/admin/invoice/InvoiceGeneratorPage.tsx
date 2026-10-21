@@ -1,821 +1,742 @@
-import { useState, useRef, useMemo } from 'react'
-import {
-  ArrowLeft,
-  CreditCard,
-  FileText,
-  Plus,
-  Printer,
-  Trash2,
-  Upload,
-} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { ArrowLeft, Copy, CopyPlus, Download, Eye, FilePenLine, FileText, Lock, Pencil, Printer, Send } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Icon } from '../../../components/Icon'
-import { Button, Card, CardBody, Field, Input, Select, useToast } from '../../../components/ui'
-import { useClient, useClients, useCreateInvoice } from '../../../lib/queries'
-import { PaymentGatewayModal } from '../../../components/payment/PaymentGatewayModal'
-import type { PaymentSuccessData } from '../../../components/payment/PaymentGatewayModal'
+import { NumberInput } from '../../../components/invoice/inputs'
+import { invoiceFileName, useInvoiceImages } from '../../../components/invoice/invoiceImages'
+import type { SheetMeta } from '../../../components/invoice/InvoiceSheet'
+import { InvoiceWorkspace } from '../../../components/invoice/InvoiceWorkspace'
+import type { InvoiceWorkspaceHandle } from '../../../components/invoice/InvoiceWorkspace'
+import { QueryError } from '../../../components/QueryError'
+import { Button, Checkbox, Dialog, Field, Input, Pill, Select, Skeleton, Tabs, Textarea, useToast } from '../../../components/ui'
+import { formatDate, formatDateTime, istDay } from '../../../lib/dates'
+import { documentFromLegacy, fillBillToFromClient, newInvoiceDocument, templateDocument } from '../../../lib/invoiceDocument'
+import type { DuplicateMode } from '../../../lib/invoiceDocument'
+import { formatMoney, validateInvoice } from '../../../lib/invoiceMath'
+import { INVOICE_LIFECYCLE } from '../../../lib/labels'
+import { useCan } from '../../../lib/permissions'
+import {
+  useClients,
+  useDuplicateInvoice,
+  useInvoice,
+  useInvoiceSettings,
+  useIssueInvoice,
+  useProjects,
+  useReviseInvoice,
+  useSaveInvoiceDraft,
+  useSaveInvoiceTemplate,
+  useSetInvoicePaymentStatus,
+} from '../../../lib/queries'
+import type { Client, Invoice, InvoiceStatus, InvoiceWithItems } from '../../../types/db'
+import type { InvoiceDocument, InvoiceSettings, ManualPaymentStatus } from '../../../types/invoiceDocument'
+import {
+  DefaultsPanel,
+  DetailsPanel,
+  HistoryPanel,
+  PaymentPanel,
+  TemplatesPanel,
+  availableMoves,
+  messageOf,
+} from './InvoicePanels'
 
-export type InvoiceLineItem = {
-  id: string
-  sno: number
-  description: string
-  rate: number
-  quantity: number
+/** Everything the generator saves: the columns plus the page. */
+type Draft = {
+  id: string | null
+  client_id: string
+  project_id: string | null
+  number: string
+  issue_date: string
+  due_date: string
+  document: InvoiceDocument
 }
 
+const DAY_MS = 86_400_000
+const snapshot = (draft: Draft) => JSON.stringify(draft)
+
+function draftFromInvoice(invoice: InvoiceWithItems): Draft {
+  return {
+    id: invoice.id,
+    client_id: invoice.client_id,
+    project_id: invoice.project_id,
+    number: invoice.number,
+    issue_date: invoice.issue_date,
+    due_date: invoice.due_date,
+    document: structuredClone(invoice.document as InvoiceDocument),
+  }
+}
+
+/** Admin → Invoices → Create / open an invoice: /admin/invoices/new or /admin/invoices/:invoiceId. */
 export default function InvoiceGeneratorPage() {
-  const { id: paramClientId } = useParams()
+  const { invoiceId: routeId = 'new' } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const toast = useToast()
+  const invoiceId = routeId === 'new' ? undefined : routeId
+  const settings = useInvoiceSettings()
+  const existing = useInvoice(invoiceId)
   const clients = useClients()
-  const createInvoice = useCreateInvoice()
 
-  const clientId = paramClientId ?? params.get('client') ?? ''
-  const clientQuery = useClient(clientId || undefined)
-  const client = clientQuery.data
-
-  // Invoice Number generator
-  const [invoiceNumber, setInvoiceNumber] = useState(() => {
-    const year = new Date().getFullYear()
-    return `${year}/0001`
+  // One editor session per invoice opened. A new draft saved for the first time is "adopted": the
+  // address gains its id but the editor (and anything typed meanwhile) stays. Until the address
+  // shows the adopted id, the old address still belongs to this session.
+  const [session, setSession] = useState<{ target: string; adopted?: string; confirmed?: boolean; count: number }>({
+    target: routeId,
+    count: 0,
   })
+  const known = routeId === session.adopted || (routeId === session.target && !session.confirmed)
+  if (!known) setSession({ target: routeId, count: session.count + 1 })
+  else if (routeId === session.adopted && !session.confirmed) setSession({ ...session, confirmed: true })
+  const adoptedHere = invoiceId !== undefined && invoiceId === session.adopted
 
-  // Dates
-  const [invoiceDate, setInvoiceDate] = useState(() => {
-    const d = new Date()
-    return d.toISOString().split('T')[0]
-  })
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() + 15)
-    return d.toISOString().split('T')[0]
-  })
+  const clientId = params.get('client') ?? ''
 
-  // Company Details (Billed By)
-  const [companyName, setCompanyName] = useState('Vernex Digital Marketing')
-  const [companyAddress, setCompanyAddress] = useState('Plot No. 42, Anna Salai')
-  const [companyCity, setCompanyCity] = useState('Chennai')
-  const [companyState, setCompanyState] = useState('Tamil Nadu')
-  const [companyPostalCode, setCompanyPostalCode] = useState('600002')
-  const [companyPhone, setCompanyPhone] = useState('+91 9789912805')
-  const [companyEmail, setCompanyEmail] = useState('admin@vernex.in')
-
-  // Client Details (Billed To)
-  const [clientName, setClientName] = useState(() => client?.name || 'Client Name')
-  const [clientAddress, setClientAddress] = useState('')
-  const [clientCity, setClientCity] = useState(() => client?.city || '')
-  const [clientState, setClientState] = useState('Tamil Nadu')
-  const [clientPostalCode, setClientPostalCode] = useState('')
-
-  // Shipping Details
-  const [showShipping, setShowShipping] = useState(false)
-  const [shippingFrom, setShippingFrom] = useState('')
-  const [shippingTo, setShippingTo] = useState('')
-
-  // Settings
-  const [invoiceType, setInvoiceType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT')
-  const [logoPosition, setLogoPosition] = useState<'LEFT' | 'CENTER' | 'RIGHT'>('LEFT')
-  const [template, setTemplate] = useState<'vernex' | 'corporate' | 'minimal'>('vernex')
-  const [currency, setCurrency] = useState('₹')
-  const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'mono'>('sans')
-  const [dateFormat, setDateFormat] = useState<'DD/MM/YYYY' | 'YYYY-MM-DD'>('DD/MM/YYYY')
-  const [amountFormat, setAmountFormat] = useState<'Indian' | 'Standard'>('Indian')
-  const [gstPercent, setGstPercent] = useState<number>(18)
-
-  // Logo
-  const [logoUrl, setLogoUrl] = useState<string>('/vernex-logo.jpg')
-  const logoInputRef = useRef<HTMLInputElement>(null)
-
-  // Line items
-  const [items, setItems] = useState<InvoiceLineItem[]>([
-    {
-      id: 'item-1',
-      sno: 1,
-      description: params.get('title') || 'Digital Marketing & Social Media Strategy Package',
-      rate: 8000,
-      quantity: 1,
-    },
-  ])
-
-  // Payment gateway modal state
-  const [gatewayOpen, setGatewayOpen] = useState(false)
-  const [isPaid, setIsPaid] = useState(false)
-
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setLogoUrl(reader.result as string)
-      toast({ title: 'Business logo updated', tone: 'ok' })
-    }
-    reader.readAsDataURL(file)
+  if (settings.isPending || clients.isPending || (invoiceId && existing.isPending && !adoptedHere)) {
+    return (
+      <div aria-busy="true" className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-[60vh] w-full" />
+      </div>
+    )
   }
-
-  function handleAddItem() {
-    const nextSno = items.length + 1
-    setItems([
-      ...items,
-      {
-        id: `item-${Date.now()}`,
-        sno: nextSno,
-        description: '',
-        rate: 0,
-        quantity: 1,
-      },
-    ])
+  if (settings.isError) return <QueryError what="the invoice settings" error={settings.error} onRetry={() => settings.refetch()} />
+  if (clients.isError) return <QueryError what="the client list" error={clients.error} onRetry={() => clients.refetch()} />
+  if (invoiceId && existing.isError && !adoptedHere) {
+    return <QueryError what="this invoice" error={existing.error} onRetry={() => existing.refetch()} />
   }
-
-  function handleUpdateItem(index: number, patch: Partial<InvoiceLineItem>) {
-    setItems(items.map((it, i) => (i === index ? { ...it, ...patch } : it)))
-  }
-
-  function handleDeleteItem(index: number) {
-    if (items.length <= 1) return
-    const next = items.filter((_, i) => i !== index).map((it, i) => ({ ...it, sno: i + 1 }))
-    setItems(next)
-  }
-
-  // Calculations
-  const subtotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + (Number(item.rate) || 0) * (Number(item.quantity) || 0), 0)
-  }, [items])
-
-  const gstAmount = useMemo(() => {
-    return (subtotal * (Number(gstPercent) || 0)) / 100
-  }, [subtotal, gstPercent])
-
-  const total = useMemo(() => {
-    return subtotal + gstAmount
-  }, [subtotal, gstAmount])
-
-  function formatMoney(val: number) {
-    if (amountFormat === 'Indian') {
-      return val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    }
-    return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
-
-  function formatDateDisplay(iso?: string) {
-    if (!iso) return ''
-    if (dateFormat === 'DD/MM/YYYY') {
-      const parts = iso.split('-')
-      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
-    }
-    return iso
-  }
-
-  async function handleSaveInvoice() {
-    if (!clientId) {
-      toast({ title: 'Select a client first to link this invoice', tone: 'bad' })
-      return
-    }
-
-    try {
-      const created = await createInvoice.mutateAsync({
-        client_id: clientId,
-        project_id: null,
-        issue_date: invoiceDate || new Date().toISOString().slice(0, 10),
-        due_date: dueDate || new Date().toISOString().slice(0, 10),
-        status: isPaid ? 'paid' : 'sent',
-        items: items.map((it) => ({
-          description: it.description || 'Service Item',
-          sac_code: '998313',
-          quantity: it.quantity,
-          unit_price_minor: Math.round(it.rate * 100),
-        })),
-      })
-      toast({ title: `Invoice ${created.number} saved successfully`, tone: 'ok' })
-    } catch {
-      toast({ title: 'Invoice saved to records', tone: 'ok' })
-    }
-  }
-
-  function handlePaymentSuccess(data: PaymentSuccessData) {
-    setIsPaid(true)
-    toast({ title: `Payment received: ${currency} ${formatMoney(data.amount)}`, tone: 'ok' })
-  }
-
-  function handlePrint() {
-    window.print()
+  if (existing.data && existing.data.document == null) {
+    return <QuickFormInvoice invoice={existing.data} client={clients.data.find((client) => client.id === existing.data.client_id)} />
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-4 no-print">
-        <div className="flex items-center gap-3">
+    <Editor
+      key={session.count}
+      settings={settings.data}
+      clients={clients.data}
+      initial={adoptedHere ? undefined : existing.data}
+      clientId={existing.data?.client_id ?? clientId}
+      projectTitle={params.get('title') ?? ''}
+      onAdopt={(id) => {
+        // Committed before the address changes, so the router's update never sees an unknown id.
+        flushSync(() => setSession((current) => ({ ...current, adopted: id })))
+        navigate(`/admin/invoices/${id}`, { replace: true })
+      }}
+      onOpen={(id) => navigate(`/admin/invoices/${id}`)}
+    />
+  )
+}
+
+function newDraft(settings: InvoiceSettings, clientId: string, projectTitle: string, clients: Client[]): Draft {
+  const document = newInvoiceDocument(settings.defaults)
+  const client = clients.find((row) => row.id === clientId)
+  if (client) document.bill_to = fillBillToFromClient(document.bill_to, client)
+  if (projectTitle) document.project.name = projectTitle
+  return {
+    id: null,
+    client_id: client ? clientId : '',
+    project_id: null,
+    number: '',
+    issue_date: istDay(new Date()),
+    due_date: istDay(new Date(Date.now() + 15 * DAY_MS)),
+    document,
+  }
+}
+
+function Editor(props: {
+  settings: InvoiceSettings
+  clients: Client[]
+  initial: InvoiceWithItems | undefined
+  clientId: string
+  projectTitle: string
+  onAdopt: (id: string) => void
+  onOpen: (id: string) => void
+}) {
+  const { settings, clients } = props
+  const toast = useToast()
+  const workspace = useRef<InvoiceWorkspaceHandle>(null)
+  const [draft, setDraft] = useState<Draft>(() =>
+    props.initial ? draftFromInvoice(props.initial) : newDraft(settings, props.clientId, props.projectTitle, clients),
+  )
+  const [savedAs, setSavedAs] = useState(() => (props.initial ? snapshot(draftFromInvoice(props.initial)) : ''))
+  const [showIssueChecks, setShowIssueChecks] = useState(false)
+  const [tab, setTab] = useState('details')
+  const [view, setView] = useState<'edit' | 'preview'>('edit')
+  const [reviewing, setReviewing] = useState(false)
+  const [dialog, setDialog] = useState<'status' | 'template' | 'revise' | null>(null)
+  const [exporting, setExporting] = useState(false)
+
+  const live = useInvoice(draft.id ?? undefined)
+  const invoice: Invoice | null = live.data ?? props.initial ?? null
+  const projects = useProjects({ client_id: draft.client_id || undefined })
+  const images = useInvoiceImages(draft.document)
+  const client = clients.find((row) => row.id === draft.client_id)
+
+  const save = useSaveInvoiceDraft()
+  const issue = useIssueInvoice()
+  const revise = useReviseInvoice()
+  const duplicate = useDuplicateInvoice()
+
+  const canEdit = useCan('invoice', draft.id ? 'edit' : 'create', { clientId: draft.client_id || undefined })
+  const canCreate = useCan('invoice', 'create', { clientId: draft.client_id || undefined })
+  const locked = Boolean(invoice && invoice.status !== 'draft') || !canEdit
+  const dirty = !locked && snapshot(draft) !== savedAs
+  const busy = save.isPending || issue.isPending || revise.isPending || duplicate.isPending
+
+  const context = { issue_date: draft.issue_date, due_date: draft.due_date, gst_rates: settings.defaults.gst_rates }
+  const draftProblems = validateInvoice(draft.document, { ...context, stage: 'draft' })
+  const issueProblems = validateInvoice(draft.document, { ...context, stage: 'issue' })
+  const shown = showIssueChecks ? issueProblems : draftProblems
+  const issuesByField = Object.fromEntries(shown.map((problem) => [problem.field, problem.message]))
+
+  // Leaving with unsaved changes asks first.
+  const dirtyRef = useRef(dirty)
+  useEffect(() => {
+    dirtyRef.current = dirty
+  }, [dirty])
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (dirtyRef.current) event.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
+
+  const setDocument = (update: (document: InvoiceDocument) => InvoiceDocument) =>
+    setDraft((current) => ({ ...current, document: update(current.document) }))
+  const setMeta = (patch: Partial<SheetMeta>) => setDraft((current) => ({ ...current, ...patch }))
+
+  async function saveDraft(): Promise<string | null> {
+    if (!draft.client_id) {
+      setTab('details')
+      toast({ title: 'Choose the client this invoice is for', tone: 'bad' })
+      return null
+    }
+    const [problem] = draftProblems
+    if (problem) {
+      toast({ title: 'Fix the highlighted fields first', description: problem.message, tone: 'bad' })
+      return null
+    }
+    try {
+      const saved = await save.mutateAsync({ ...draft, source_id: null })
+      const next: Draft = { ...draft, id: saved.id, number: saved.number, document: saved.document ?? draft.document }
+      setDraft(next)
+      setSavedAs(snapshot(next))
+      if (!draft.id) props.onAdopt(saved.id)
+      toast({ title: `Draft ${saved.number} saved`, description: 'Not issued: the client cannot see drafts.', tone: 'ok' })
+      return saved.id
+    } catch (error) {
+      toast({ title: 'Could not save the draft', description: messageOf(error), tone: 'bad' })
+      return null
+    }
+  }
+
+  /** Step 1 of issuing: check everything, then show the final pages for review. */
+  function startReview() {
+    setShowIssueChecks(true)
+    const [problem] = issueProblems
+    if (!draft.client_id) {
+      setTab('details')
+      toast({ title: 'Choose the client this invoice is for', tone: 'bad' })
+    } else if (problem) {
+      setTab('details')
+      toast({ title: 'This invoice is not ready to issue', description: problem.message, tone: 'bad' })
+    } else {
+      setReviewing(true)
+    }
+  }
+
+  /** Step 2: save if needed, issue on the server, and the client sees it in their portal. */
+  async function confirmIssue() {
+    const id = dirty || !draft.id ? await saveDraft() : draft.id
+    if (!id) return
+    try {
+      const issued = await issue.mutateAsync(id)
+      setReviewing(false)
+      toast({
+        title: `Invoice ${issued.number} issued and sent to ${client?.name ?? 'the client'}`,
+        description: 'It is now locked, in their portal under Billing, and on their Action Required list.',
+        tone: 'ok',
+      })
+    } catch (error) {
+      toast({ title: 'Could not issue the invoice', description: messageOf(error), tone: 'bad' })
+    }
+  }
+
+  async function confirmRevise() {
+    if (!invoice) return
+    try {
+      const revision = await revise.mutateAsync(invoice.id)
+      setDialog(null)
+      toast({ title: `Revision ${revision.number} created`, description: `${invoice.number} stays valid until you issue the revision.`, tone: 'ok' })
+      props.onOpen(revision.id)
+    } catch (error) {
+      toast({ title: 'Could not start a revision', description: messageOf(error), tone: 'bad' })
+    }
+  }
+
+  async function duplicateAs(mode: DuplicateMode) {
+    if (!invoice) return
+    if (dirty) {
+      toast({ title: 'Save your changes first', description: 'The copy is made from the saved invoice.', tone: 'bad' })
+      return
+    }
+    try {
+      const copy = await duplicate.mutateAsync({ id: invoice.id, mode })
+      toast({
+        title: mode === 'next_month' ? `Draft ${copy.number} created for the next month` : `Draft ${copy.number} created as a copy`,
+        description: `${invoice.number} is unchanged.`,
+        tone: 'ok',
+      })
+      props.onOpen(copy.id)
+    } catch (error) {
+      toast({ title: 'Could not copy the invoice', description: messageOf(error), tone: 'bad' })
+    }
+  }
+
+  async function downloadPdf() {
+    setExporting(true)
+    try {
+      await workspace.current?.downloadPdf()
+      toast({ title: 'PDF downloaded', description: 'Same A4 pages as the preview.', tone: 'ok' })
+    } catch (error) {
+      toast({ title: 'Could not create the PDF', description: `${messageOf(error)} Use Print and choose “Save as PDF” instead.`, tone: 'bad' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const status = invoice?.status ?? 'draft'
+  const lifecycle = INVOICE_LIFECYCLE[status]
+  const canRevise = Boolean(
+    invoice?.issued_at && !invoice.superseded_by && ['sent', 'viewed', 'overdue'].includes(status) && invoice.amount_paid_minor === 0,
+  )
+  const showEditor = !locked && view === 'edit' && !reviewing
+  const meta: SheetMeta = { number: draft.number, issue_date: draft.issue_date, due_date: draft.due_date }
+  const stamp = status === 'paid' ? { label: 'Paid', tone: 'ok' as const } : status === 'void' ? { label: 'Cancelled', tone: 'bad' as const } : null
+  const fileName = `${invoiceFileName(draft.number)}${status === 'draft' ? '-draft' : ''}`
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
+        <div className="flex min-w-0 items-center gap-3">
           <Link
-            to={clientId ? `/admin/clients/${clientId}` : '/admin/clients'}
+            to="/admin/invoices"
             className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule px-3 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink"
           >
             <Icon icon={ArrowLeft} size={15} />
-            Back
+            Invoices
           </Link>
-          <div>
-            <h1 className="text-[1.4rem] font-semibold leading-tight text-ink">
-              Digital Marketing Agency Invoice
+          <div className="min-w-0">
+            <h1 className="flex flex-wrap items-center gap-2 text-[1.35rem] leading-tight">
+              {draft.id ? 'Invoice' : 'Create invoice'}
+              <Pill tone={lifecycle.tone}>{lifecycle.label}</Pill>
+              {dirty && <span className="font-sans text-sm font-normal text-ink-muted">Unsaved changes</span>}
             </h1>
-            <p className="text-xs text-ink-muted">
-              Customizable agency invoice with GST calculations, multi-currency and payment gateway checkout.
+            <p className="truncate text-sm text-ink-muted">
+              <span className="font-mono">{draft.number || 'Number assigned on first save'}</span>
+              {client ? ` · ${client.name}` : ''}
+              {invoice && invoice.revision > 1 ? ` · revision ${invoice.revision}` : ''}
+              {invoice ? ` · last saved ${formatDateTime(invoice.updated_at)}` : ''}
             </p>
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" onClick={handlePrint} className="gap-1.5">
+          {!locked && (
+            <>
+              <Button onClick={() => void saveDraft()} loading={save.isPending} disabled={busy}>
+                <Icon icon={FileText} size={15} />
+                Save draft
+              </Button>
+              <Button variant="primary" onClick={startReview} disabled={busy || reviewing}>
+                <Icon icon={Send} size={15} />
+                Issue Invoice &amp; Send to Client
+              </Button>
+            </>
+          )}
+          {canRevise && canCreate && (
+            <Button onClick={() => setDialog('revise')} disabled={busy}>
+              <Icon icon={FilePenLine} size={15} />
+              Revise
+            </Button>
+          )}
+          {invoice && canCreate && (
+            <>
+              <Button onClick={() => void duplicateAs('copy')} disabled={busy}>
+                <Icon icon={Copy} size={15} />
+                Duplicate
+              </Button>
+              <Button onClick={() => void duplicateAs('next_month')} disabled={busy}>
+                <Icon icon={CopyPlus} size={15} />
+                Duplicate for next month
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" onClick={() => workspace.current?.print()}>
             <Icon icon={Printer} size={15} />
-            Print / PDF
+            Print
           </Button>
-
-          <Button onClick={handleSaveInvoice} loading={createInvoice.isPending} className="gap-1.5">
-            <Icon icon={FileText} size={15} />
-            Save Invoice
-          </Button>
-
-          <Button variant="primary" onClick={() => setGatewayOpen(true)} className="gap-1.5">
-            <Icon icon={CreditCard} size={15} />
-            Proceed to Payment Gateway
+          <Button variant="ghost" loading={exporting} onClick={() => void downloadPdf()}>
+            <Icon icon={Download} size={15} />
+            Download PDF
           </Button>
         </div>
       </div>
 
-      {/* Main Split Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left Inputs & Settings Form (col-span-5) */}
-        <div className="flex flex-col gap-5 lg:col-span-5 no-print">
-          {/* Logo & Invoice Meta Card */}
-          <Card>
-            <CardBody className="flex flex-col gap-4 p-5">
-              <h2 className="text-base font-semibold text-ink">Invoice Header &amp; Branding</h2>
-
-              <div className="flex items-center justify-between rounded-card border border-rule bg-paper/50 p-3">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={logoUrl}
-                    alt="Logo Preview"
-                    className="h-10 w-10 rounded border border-rule object-contain bg-white p-1"
-                  />
-                  <div>
-                    <div className="text-xs font-semibold text-ink">Business Logo</div>
-                    <div className="text-[11px] text-ink-muted">Upload custom PNG/JPG logo</div>
-                  </div>
-                </div>
-
-                <input
-                  type="file"
-                  ref={logoInputRef}
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => logoInputRef.current?.click()}
-                  className="gap-1 text-xs"
-                >
-                  <Icon icon={Upload} size={13} />
-                  Change
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="INVOICE #">
-                  <Input
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    placeholder="2026/0001"
-                  />
-                </Field>
-
-                <Field label="Invoice Date">
-                  <Input
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                  />
-                </Field>
-              </div>
-
-              <Field label="Due Date">
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </Field>
-
-              {!clientId && (
-                <Field label="Select Client to Link">
-                  <Select
-                    value={clientId}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const sel = (clients.data ?? []).find((c) => c.id === e.target.value)
-                        if (sel) {
-                          setClientName(sel.name)
-                          if (sel.city) setClientCity(sel.city)
-                        }
-                        navigate(`/admin/clients/${e.target.value}/invoice`)
-                      }
-                    }}
-                  >
-                    <option value="">Select a client...</option>
-                    {(clients.data ?? []).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </CardBody>
-          </Card>
-
-          {/* Company Details (Billed By) Card */}
-          <Card>
-            <CardBody className="flex flex-col gap-3 p-5">
-              <h2 className="text-base font-semibold text-ink">Company Details (Billed By)</h2>
-
-              <Field label="Name *" required>
-                <Input
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Vernex Digital Marketing"
-                />
-              </Field>
-
-              <Field label="Address (Optional)">
-                <Input
-                  value={companyAddress}
-                  onChange={(e) => setCompanyAddress(e.target.value)}
-                  placeholder="Street Address"
-                />
-              </Field>
-
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="City (Optional)">
-                  <Input
-                    value={companyCity}
-                    onChange={(e) => setCompanyCity(e.target.value)}
-                    placeholder="City"
-                  />
-                </Field>
-                <Field label="State (Optional)">
-                  <Input
-                    value={companyState}
-                    onChange={(e) => setCompanyState(e.target.value)}
-                    placeholder="State"
-                  />
-                </Field>
-                <Field label="Postal Code">
-                  <Input
-                    value={companyPostalCode}
-                    onChange={(e) => setCompanyPostalCode(e.target.value)}
-                    placeholder="600001"
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Phone">
-                  <Input
-                    value={companyPhone}
-                    onChange={(e) => setCompanyPhone(e.target.value)}
-                    placeholder="+91 9789912805"
-                  />
-                </Field>
-                <Field label="Email">
-                  <Input
-                    value={companyEmail}
-                    onChange={(e) => setCompanyEmail(e.target.value)}
-                    placeholder="admin@vernex.in"
-                  />
-                </Field>
-              </div>
-            </CardBody>
-          </Card>
-
-          {/* Client Details (Billed To) Card */}
-          <Card>
-            <CardBody className="flex flex-col gap-3 p-5">
-              <h2 className="text-base font-semibold text-ink">Client Details (Billed To)</h2>
-
-              <Field label="Name *" required>
-                <Input
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Client Name"
-                />
-              </Field>
-
-              <Field label="Address (Optional)">
-                <Input
-                  value={clientAddress}
-                  onChange={(e) => setClientAddress(e.target.value)}
-                  placeholder="Client Address"
-                />
-              </Field>
-
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="City (Optional)">
-                  <Input
-                    value={clientCity}
-                    onChange={(e) => setClientCity(e.target.value)}
-                    placeholder="City"
-                  />
-                </Field>
-                <Field label="State (Optional)">
-                  <Input
-                    value={clientState}
-                    onChange={(e) => setClientState(e.target.value)}
-                    placeholder="State"
-                  />
-                </Field>
-                <Field label="Postal Code">
-                  <Input
-                    value={clientPostalCode}
-                    onChange={(e) => setClientPostalCode(e.target.value)}
-                    placeholder="Postal Code"
-                  />
-                </Field>
-              </div>
-
-              {/* Shipping Details Toggle */}
-              <div className="mt-2 border-t border-rule pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowShipping(!showShipping)}
-                  className="text-xs font-semibold text-signal hover:underline"
-                >
-                  {showShipping ? '− Hide Shipping Details' : '+ Add Shipping Details'}
+      {reviewing && (
+        <section aria-label="Final review" className="no-print flex flex-wrap items-center justify-between gap-3 rounded-card border border-gold bg-surface p-3">
+          <p className="text-sm">
+            <strong>Final review.</strong> These are the exact A4 pages {client?.name ?? 'the client'} will see and download. Issuing locks this version,
+            records the issue time on the server and sends it to their portal. No payment is recorded.
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => setReviewing(false)} disabled={busy}>
+              Back to editing
+            </Button>
+            <Button variant="primary" loading={save.isPending || issue.isPending} onClick={() => void confirmIssue()}>
+              Confirm: issue &amp; send
+            </Button>
+          </div>
+        </section>
+      )}
+      {invoice?.issued_at && (
+        <div role="status" className="no-print flex items-start gap-2 rounded-card border border-rule bg-surface p-3 text-sm">
+          <Icon icon={Lock} size={16} className="mt-0.5 shrink-0 text-ink-muted" />
+          <span>
+            Issued {formatDateTime(invoice.issued_at)} to {client?.name ?? 'the client'}. This version is locked: changes need a revision, which replaces it
+            only once issued.
+            {invoice.superseded_by && (
+              <>
+                {' '}
+                <button type="button" className="underline" onClick={() => props.onOpen(invoice.superseded_by as string)}>
+                  Open the revision that replaced it.
                 </button>
-
-                {showShipping && (
-                  <div className="mt-3 flex flex-col gap-3">
-                    <Field label="Shipping From">
-                      <Input
-                        value={shippingFrom}
-                        onChange={(e) => setShippingFrom(e.target.value)}
-                        placeholder="Shipping origin"
-                      />
-                    </Field>
-                    <Field label="Shipping To">
-                      <Input
-                        value={shippingTo}
-                        onChange={(e) => setShippingTo(e.target.value)}
-                        placeholder="Shipping destination"
-                      />
-                    </Field>
-                  </div>
-                )}
-              </div>
-            </CardBody>
-          </Card>
-
-          {/* Settings Card */}
-          <Card>
-            <CardBody className="flex flex-col gap-3 p-5">
-              <h2 className="text-base font-semibold text-ink">Settings</h2>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Invoice Type">
-                  <Select
-                    value={invoiceType}
-                    onChange={(e) => setInvoiceType(e.target.value as 'PRODUCT' | 'SERVICE')}
-                  >
-                    <option value="PRODUCT">PRODUCT (Selected)</option>
-                    <option value="SERVICE">SERVICE</option>
-                  </Select>
-                </Field>
-
-                <Field label="Logo Position">
-                  <Select
-                    value={logoPosition}
-                    onChange={(e) => setLogoPosition(e.target.value as 'LEFT' | 'CENTER' | 'RIGHT')}
-                  >
-                    <option value="LEFT">LEFT (Selected)</option>
-                    <option value="CENTER">CENTER</option>
-                    <option value="RIGHT">RIGHT</option>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Choose Template">
-                  <Select
-                    value={template}
-                    onChange={(e) => setTemplate(e.target.value as 'vernex' | 'corporate' | 'minimal')}
-                  >
-                    <option value="vernex">Vernex Agency (Official)</option>
-                    <option value="corporate">Classic Corporate</option>
-                    <option value="minimal">Minimal Modern</option>
-                  </Select>
-                </Field>
-
-                <Field label="Currency">
-                  <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                    <option value="₹">₹ (INR)</option>
-                    <option value="$">$ (USD)</option>
-                    <option value="€">€ (EUR)</option>
-                    <option value="£">£ (GBP)</option>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="Font">
-                  <Select
-                    value={fontFamily}
-                    onChange={(e) => setFontFamily(e.target.value as 'sans' | 'serif' | 'mono')}
-                  >
-                    <option value="sans">Sans-serif</option>
-                    <option value="serif">Serif</option>
-                    <option value="mono">Monospace</option>
-                  </Select>
-                </Field>
-
-                <Field label="Date Format">
-                  <Select
-                    value={dateFormat}
-                    onChange={(e) => setDateFormat(e.target.value as 'DD/MM/YYYY' | 'YYYY-MM-DD')}
-                  >
-                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                  </Select>
-                </Field>
-
-                <Field label="Amount Format">
-                  <Select
-                    value={amountFormat}
-                    onChange={(e) => setAmountFormat(e.target.value as 'Indian' | 'Standard')}
-                  >
-                    <option value="Indian">Indian (Lakhs)</option>
-                    <option value="Standard">Standard</option>
-                  </Select>
-                </Field>
-              </div>
-
-              <Field label="GST / Tax Rate (%)">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={gstPercent}
-                  onChange={(e) => setGstPercent(Number(e.target.value) || 0)}
-                  placeholder="18"
-                />
-              </Field>
-            </CardBody>
-          </Card>
+              </>
+            )}
+          </span>
         </div>
+      )}
+      {invoice && !invoice.issued_at && invoice.revision_of && (
+        <div role="status" className="no-print rounded-card border border-rule bg-surface p-3 text-sm">
+          Revision {invoice.revision} of an issued invoice. The original stays valid until you issue this revision.{' '}
+          <button type="button" className="underline" onClick={() => props.onOpen(invoice.revision_of as string)}>
+            Open the original.
+          </button>
+        </div>
+      )}
 
-        {/* Right Live Document Preview (col-span-7) */}
-        <div className="flex flex-col items-center gap-6 lg:col-span-7">
-          <div
-            className={`w-full max-w-[760px] rounded-lg border border-rule bg-white p-8 text-neutral-900 shadow-md print:m-0 print:max-w-none print:rounded-none print:border-none print:p-6 print:shadow-none ${
-              fontFamily === 'serif'
-                ? 'font-serif'
-                : fontFamily === 'mono'
-                ? 'font-mono'
-                : 'font-sans'
-            }`}
-          >
-            {/* Invoice Top Branding */}
-            <div
-              className={`flex items-start justify-between border-b-2 border-neutral-900 pb-6 ${
-                logoPosition === 'CENTER'
-                  ? 'flex-col items-center text-center gap-4'
-                  : logoPosition === 'RIGHT'
-                  ? 'flex-row-reverse text-right'
-                  : 'flex-row'
-              }`}
-            >
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={logoUrl}
-                    alt="Company Logo"
-                    className="h-12 w-auto object-contain"
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <InvoiceWorkspace
+          ref={workspace}
+          fileName={fileName}
+          document={draft.document}
+          meta={meta}
+          images={images}
+          stamp={stamp}
+          edit={showEditor ? { setDocument, setMeta, issues: issuesByField, numberPlaceholder: draft.id ? '' : 'Assigned on save' } : undefined}
+          toolbarStart={
+            !locked && !reviewing ? (
+              <div role="group" aria-label="View" className="inline-flex rounded-card border border-rule bg-surface p-0.5">
+                {(['edit', 'preview'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={view === mode}
+                    onClick={() => setView(mode)}
+                    className={`inline-flex min-h-[32px] items-center gap-1 rounded-field px-3 text-sm ${view === mode ? 'bg-ink text-surface' : 'text-ink-muted hover:text-ink'}`}
+                  >
+                    <Icon icon={mode === 'edit' ? Pencil : Eye} size={14} />
+                    {mode === 'edit' ? 'Edit' : 'Preview'}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="text-sm text-ink-muted">{reviewing ? 'Final preview' : 'Preview'}</span>
+            )
+          }
+        />
+
+        <aside className="no-print min-w-0 rounded-card border border-rule bg-paper p-3" aria-label="Invoice settings">
+          <Tabs
+            label="Invoice settings"
+            value={tab}
+            onValueChange={setTab}
+            items={[
+              {
+                id: 'details',
+                label: 'Invoice',
+                content: (
+                  <DetailsPanel
+                    document={draft.document}
+                    setDocument={setDocument}
+                    locked={locked || reviewing}
+                    settings={settings}
+                    clients={clients}
+                    clientId={draft.client_id}
+                    clientLocked={Boolean(draft.id)}
+                    onClientChange={(chosen) =>
+                      setDraft((current) => ({
+                        ...current,
+                        client_id: chosen?.id ?? '',
+                        project_id: null,
+                        document: chosen
+                          ? { ...current.document, bill_to: fillBillToFromClient(current.document.bill_to, chosen) }
+                          : current.document,
+                      }))
+                    }
+                    projects={projects.data ?? []}
+                    projectId={draft.project_id}
+                    onProjectChange={(project) =>
+                      setDraft((current) => ({
+                        ...current,
+                        project_id: project?.id ?? null,
+                        document:
+                          project && !current.document.project.name
+                            ? { ...current.document, project: { ...current.document.project, name: project.name } }
+                            : current.document,
+                      }))
+                    }
+                    logoUrl={images.logo}
+                    issueProblems={issueProblems}
+                    draftProblems={draftProblems}
                   />
-                  <div>
-                    <h2 className="text-xl font-bold tracking-tight text-neutral-950">
-                      {companyName}
-                    </h2>
-                    <span className="text-xs text-neutral-500">Digital Marketing Agency</span>
-                  </div>
-                </div>
+                ),
+              },
+              {
+                id: 'payment',
+                label: 'Payment',
+                content: (
+                  <PaymentPanel
+                    document={draft.document}
+                    setDocument={setDocument}
+                    locked={locked || reviewing}
+                    settings={settings}
+                    qrUrl={images.qr}
+                    invoice={invoice}
+                    onRecordStatus={() => setDialog('status')}
+                  />
+                ),
+              },
+              {
+                id: 'templates',
+                label: 'Templates',
+                content: (
+                  <TemplatesPanel
+                    document={draft.document}
+                    locked={locked || reviewing}
+                    onSaveAsTemplate={() => setDialog('template')}
+                    onApply={(document, name) => {
+                      setDraft((current) => ({ ...current, document }))
+                      toast({ title: `Template "${name}" applied`, description: 'Save the draft to keep it.', tone: 'ok' })
+                    }}
+                  />
+                ),
+              },
+              { id: 'defaults', label: 'Defaults', content: <DefaultsPanel settings={settings} document={draft.document} /> },
+              ...(invoice ? [{ id: 'history', label: 'History', content: <HistoryPanel invoice={invoice} /> }] : []),
+            ]}
+          />
+        </aside>
+      </div>
 
-                <div className="text-xs leading-relaxed text-neutral-600">
-                  {companyAddress && <div>{companyAddress}</div>}
-                  <div>
-                    {[companyCity, companyState, companyPostalCode].filter(Boolean).join(', ')}
-                  </div>
-                  <div>Phone: {companyPhone} · Email: {companyEmail}</div>
-                </div>
-              </div>
+      <Dialog
+        open={dialog === 'revise'}
+        onClose={() => setDialog(null)}
+        title={`Revise ${invoice?.number ?? 'invoice'}?`}
+        description="A new draft revision is created from this invoice. The issued original stays valid and unchanged until you issue the revision, which then cancels it."
+        footer={
+          <>
+            <Button onClick={() => setDialog(null)}>Cancel</Button>
+            <Button variant="primary" loading={revise.isPending} onClick={() => void confirmRevise()}>
+              Create revision
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-muted">Paid, part-paid and cancelled invoices cannot be revised.</p>
+      </Dialog>
+      {dialog === 'status' && invoice && <PaymentStatusDialog invoice={invoice} mock={settings.payment_mode === 'mock'} onClose={() => setDialog(null)} />}
+      {dialog === 'template' && <SaveTemplateDialog document={draft.document} onClose={() => setDialog(null)} />}
+    </div>
+  )
+}
 
-              <div
-                className={`flex flex-col ${
-                  logoPosition === 'RIGHT' ? 'text-left' : 'text-right'
-                }`}
-              >
-                <span className="text-2xl font-black tracking-wider uppercase text-neutral-950">
-                  INVOICE
-                </span>
-                <span className="font-mono text-sm font-semibold text-neutral-700">
-                  # {invoiceNumber}
-                </span>
+const STATUS_CHOICE_LABEL: Partial<Record<InvoiceStatus, string>> = {
+  partially_paid: 'Partially paid',
+  paid: 'Paid in full',
+  overdue: 'Overdue',
+  void: 'Cancelled',
+}
 
-                <div className="mt-3 text-xs leading-tight text-neutral-600">
-                  <div>
-                    <span className="font-semibold text-neutral-800">Invoice Date:</span>{' '}
-                    {formatDateDisplay(invoiceDate)}
-                  </div>
-                  <div className="mt-1">
-                    <span className="font-semibold text-neutral-800">Due Date:</span>{' '}
-                    {formatDateDisplay(dueDate)}
-                  </div>
-                  {isPaid && (
-                    <div className="mt-2 inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-bold uppercase text-green-700">
-                      PAID
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+function PaymentStatusDialog({ invoice, mock, onClose }: { invoice: Invoice; mock: boolean; onClose: () => void }) {
+  const toast = useToast()
+  const setStatus = useSetInvoicePaymentStatus()
+  const moves = availableMoves(invoice.status)
+  const [status, setStatusChoice] = useState<InvoiceStatus>(moves[0] ?? 'paid')
+  const [amount, setAmount] = useState<number | null>(invoice.status === 'partially_paid' ? invoice.amount_paid_minor : null)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string>()
 
-            {/* Bill To & Ship To Details */}
-            <div className="grid grid-cols-2 gap-6 py-6 border-b border-neutral-200 text-xs">
-              <div>
-                <span className="font-bold uppercase tracking-wider text-neutral-500">
-                  Billed To
-                </span>
-                <div className="mt-1.5 text-sm font-bold text-neutral-900">{clientName}</div>
-                {clientAddress && <div className="text-neutral-600">{clientAddress}</div>}
-                <div>
-                  {[clientCity, clientState, clientPostalCode].filter(Boolean).join(', ')}
-                </div>
-              </div>
+  async function submit() {
+    if (status === 'partially_paid' && (amount === null || !Number.isInteger(amount) || amount <= 0 || amount >= invoice.total_minor)) {
+      setError(`Enter the amount received: above zero and below ${formatMoney(invoice.total_minor, invoice.currency)}.`)
+      return
+    }
+    setError(undefined)
+    try {
+      await setStatus.mutateAsync({
+        id: invoice.id,
+        input: { status: status as ManualPaymentStatus, amount_paid_minor: amount ?? undefined, note },
+      })
+      toast({ title: `${invoice.number} marked ${INVOICE_LIFECYCLE[status].label.toLowerCase()}`, description: 'Recorded in the history.', tone: 'ok' })
+      onClose()
+    } catch (failure) {
+      toast({ title: 'Could not record the status', description: messageOf(failure), tone: 'bad' })
+    }
+  }
 
-              {showShipping && (shippingFrom || shippingTo) ? (
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-neutral-500">
-                    Shipping Details
-                  </span>
-                  {shippingFrom && (
-                    <div className="mt-1 text-neutral-700">
-                      <span className="font-semibold">From:</span> {shippingFrom}
-                    </div>
-                  )}
-                  {shippingTo && (
-                    <div className="text-neutral-700">
-                      <span className="font-semibold">To:</span> {shippingTo}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-right">
-                  <span className="font-bold uppercase tracking-wider text-neutral-500">
-                    Invoice Details
-                  </span>
-                  <div className="mt-1 text-neutral-700">
-                    <span className="font-semibold">Mode:</span> {invoiceType}
-                  </div>
-                  <div className="text-neutral-700">
-                    <span className="font-semibold">Currency:</span> {currency}
-                  </div>
-                </div>
-              )}
-            </div>
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Record payment status for ${invoice.number}`}
+      description={`Total ${formatMoney(invoice.total_minor, invoice.currency)} · received so far ${formatMoney(invoice.amount_paid_minor, invoice.currency)}`}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={setStatus.isPending} onClick={() => void submit()}>
+            Record status
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {mock && (
+          <p role="note" className="rounded-card border border-rule bg-paper p-2.5 text-sm">
+            Mock Payment mode: nothing has been verified automatically. Record a payment only after confirming the money arrived.
+          </p>
+        )}
+        <Field label="New status">
+          <Select value={status} onChange={(event) => setStatusChoice(event.target.value as InvoiceStatus)}>
+            {moves.map((move) => (
+              <option key={move} value={move}>
+                {STATUS_CHOICE_LABEL[move] ?? INVOICE_LIFECYCLE[move].label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {status === 'partially_paid' && (
+          <Field label={`Total received so far (${invoice.currency})`} error={error}>
+            <NumberInput
+              className="min-h-[44px] w-full rounded-field border border-rule bg-surface px-3 lg:min-h-[36px]"
+              minorUnits
+              value={amount}
+              onValue={setAmount}
+            />
+          </Field>
+        )}
+        <Field label="Note" hint="Optional, e.g. the bank reference you checked. Kept in the history.">
+          <Textarea rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+      </div>
+    </Dialog>
+  )
+}
 
-            {/* Items Table */}
-            <div className="py-6">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b-2 border-neutral-900 text-neutral-800 font-bold uppercase tracking-wider">
-                    <th className="py-2.5 w-12 text-center">S.No</th>
-                    <th className="py-2.5">{invoiceType === 'PRODUCT' ? 'Product' : 'Service Description'}</th>
-                    <th className="py-2.5 w-24 text-right">Rate</th>
-                    <th className="py-2.5 w-20 text-center">Quantity</th>
-                    <th className="py-2.5 w-28 text-right">Total</th>
-                    <th className="py-2.5 w-10 text-center no-print"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200">
-                  {items.map((item, index) => {
-                    const lineTotal = (Number(item.rate) || 0) * (Number(item.quantity) || 0)
-                    return (
-                      <tr key={item.id} className="group">
-                        <td className="py-3 text-center font-mono text-neutral-500">{item.sno}</td>
-                        <td className="py-3 pr-2">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => handleUpdateItem(index, { description: e.target.value })}
-                            placeholder="Product / Service description..."
-                            className="w-full bg-transparent font-medium text-neutral-900 focus:bg-neutral-100 focus:outline-none rounded px-1.5 py-0.5"
-                          />
-                        </td>
-                        <td className="py-3 text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            value={item.rate}
-                            onChange={(e) => handleUpdateItem(index, { rate: Number(e.target.value) || 0 })}
-                            className="w-full bg-transparent text-right font-mono focus:bg-neutral-100 focus:outline-none rounded px-1.5 py-0.5"
-                          />
-                        </td>
-                        <td className="py-3 text-center">
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.quantity}
-                            onChange={(e) => handleUpdateItem(index, { quantity: Number(e.target.value) || 1 })}
-                            className="w-16 mx-auto bg-transparent text-center font-mono focus:bg-neutral-100 focus:outline-none rounded px-1.5 py-0.5"
-                          />
-                        </td>
-                        <td className="py-3 text-right font-mono font-semibold text-neutral-900">
-                          {currency} {formatMoney(lineTotal)}
-                        </td>
-                        <td className="py-3 text-center no-print">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItem(index)}
-                            disabled={items.length <= 1}
-                            className="text-neutral-400 hover:text-bad disabled:opacity-20"
-                            title="Remove row"
-                          >
-                            <Icon icon={Trash2} size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+function SaveTemplateDialog({ document, onClose }: { document: InvoiceDocument; onClose: () => void }) {
+  const toast = useToast()
+  const saveTemplate = useSaveInvoiceTemplate()
+  const [name, setName] = useState('')
+  const [includeClient, setIncludeClient] = useState(false)
+  const [error, setError] = useState<string>()
 
-              {/* Add row (+) button */}
-              <div className="pt-3 no-print">
-                <Button size="sm" variant="ghost" onClick={handleAddItem} className="gap-1 text-xs">
-                  <Icon icon={Plus} size={14} />
-                  Add item
-                </Button>
-              </div>
-            </div>
+  async function submit() {
+    if (!name.trim()) {
+      setError('Give the template a name.')
+      return
+    }
+    try {
+      await saveTemplate.mutateAsync({ name: name.trim(), document: templateDocument(document, includeClient) })
+      toast({ title: `Template "${name.trim()}" saved`, tone: 'ok' })
+      onClose()
+    } catch (failure) {
+      toast({ title: 'Could not save the template', description: messageOf(failure), tone: 'bad' })
+    }
+  }
 
-            {/* Calculations & Totals */}
-            <div className="flex justify-end pt-4 border-t border-neutral-300">
-              <div className="w-64 flex flex-col gap-2 text-xs">
-                <div className="flex justify-between py-1 text-neutral-600">
-                  <span>Subtotal</span>
-                  <span className="font-mono font-medium text-neutral-900">
-                    {currency} {formatMoney(subtotal)}
-                  </span>
-                </div>
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Save as template"
+      description="Keeps the company details, rows, tax, discount and payment block. Invoice number and dates are never saved."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={saveTemplate.isPending} onClick={() => void submit()}>
+            Save template
+          </Button>
+        </>
+      }
+    >
+      <form
+        noValidate
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void submit()
+        }}
+      >
+        <Field label="Template name" required error={error}>
+          <Input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
+        </Field>
+        <Checkbox
+          label="Include client and project details"
+          checked={includeClient}
+          onChange={(event) => setIncludeClient(event.target.checked)}
+        />
+      </form>
+    </Dialog>
+  )
+}
 
-                <div className="flex justify-between py-1 text-neutral-600">
-                  <span>GST ({gstPercent}%)</span>
-                  <span className="font-mono font-medium text-neutral-900">
-                    {currency} {formatMoney(gstAmount)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between border-t-2 border-neutral-900 pt-2 text-sm font-bold text-neutral-950">
-                  <span>Total</span>
-                  <span className="font-mono">
-                    {currency} {formatMoney(total)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment & Bank Details footer */}
-            <div className="mt-12 rounded-lg bg-neutral-50 p-4 border border-neutral-200 text-xs">
-              <span className="font-bold text-neutral-900 uppercase tracking-wide">
-                Payment Instructions:
-              </span>
-              <p className="mt-1 text-neutral-600">
-                Payment can be made via UPI ({companyEmail}) or NetBanking to VerneX Digital Marketing,
-                HDFC Bank, Anna Salai Branch, IFSC: HDFC0001234, A/C: 50200088992211.
-              </p>
-            </div>
+/** An invoice from the quick form: shown, printed and downloaded in the same layout; edited from the Invoices tab. */
+function QuickFormInvoice({ invoice, client }: { invoice: InvoiceWithItems; client: Client | undefined }) {
+  const toast = useToast()
+  const workspace = useRef<InvoiceWorkspaceHandle>(null)
+  const document = documentFromLegacy(invoice, invoice.items, client)
+  const meta = { number: invoice.number, issue_date: invoice.issue_date, due_date: invoice.due_date }
+  const images = useInvoiceImages(document)
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
+        <div className="flex items-center gap-3">
+          <Link to="/admin/invoices" className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule px-3 text-sm text-ink-muted hover:bg-ink/5">
+            <Icon icon={ArrowLeft} size={15} />
+            Invoices
+          </Link>
+          <div>
+            <h1 className="text-[1.35rem] leading-tight">Invoice {invoice.number}</h1>
+            <p className="text-sm text-ink-muted">
+              Made with the quick form on {formatDate(invoice.created_at)}. Edit it from the client's Invoices tab.
+            </p>
           </div>
         </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => workspace.current?.print()}>
+            <Icon icon={Printer} size={15} />
+            Print
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() =>
+              void workspace.current?.downloadPdf().catch((error: unknown) => toast({ title: 'Could not create the PDF', description: messageOf(error), tone: 'bad' }))
+            }
+          >
+            <Icon icon={Download} size={15} />
+            Download PDF
+          </Button>
+        </div>
       </div>
-
-      {/* Payment Gateway Modal */}
-      <PaymentGatewayModal
-        open={gatewayOpen}
-        onClose={() => setGatewayOpen(false)}
-        invoiceNumber={invoiceNumber}
-        clientName={clientName}
-        amount={total}
-        currency={currency}
-        onSuccess={handlePaymentSuccess}
-      />
+      <InvoiceWorkspace ref={workspace} fileName={invoiceFileName(invoice.number)} document={document} meta={meta} images={images} />
     </div>
   )
 }

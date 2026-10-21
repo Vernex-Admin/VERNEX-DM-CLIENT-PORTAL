@@ -12,6 +12,7 @@ import type {
   ServiceRequestStatus,
   UserRole,
 } from '../types/db'
+import type { TaxMode } from '../types/invoiceDocument'
 
 export const HEALTH_STATUS: Record<HealthStatus, { label: string; tone: Tone }> = {
   on_track: { label: 'On track', tone: 'ok' },
@@ -66,6 +67,23 @@ export const INVOICE_STATUS: Record<InvoiceStatus, { label: string; tone: Tone }
   paid: { label: 'Paid', tone: 'ok' },
   overdue: { label: 'Overdue', tone: 'bad' },
   void: { label: 'Cancelled', tone: 'neutral' },
+}
+
+/** Staff wording for the invoice lifecycle in the Invoice Generator. */
+export const INVOICE_LIFECYCLE: Record<InvoiceStatus, { label: string; tone: Tone }> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  sent: { label: 'Issued', tone: 'info' },
+  viewed: { label: 'Issued', tone: 'info' },
+  partially_paid: { label: 'Partially paid', tone: 'warn' },
+  paid: { label: 'Paid', tone: 'ok' },
+  overdue: { label: 'Overdue', tone: 'bad' },
+  void: { label: 'Cancelled', tone: 'neutral' },
+}
+
+export const TAX_MODE_LABEL: Record<TaxMode, string> = {
+  none: 'No GST',
+  cgst_sgst: 'CGST + SGST (same state)',
+  igst: 'IGST (another state)',
 }
 
 export const SERVICE_REQUEST_STATUS: Record<ServiceRequestStatus, { label: string; tone: Tone }> = {

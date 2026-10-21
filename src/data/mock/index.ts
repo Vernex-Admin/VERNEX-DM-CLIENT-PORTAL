@@ -1,4 +1,3 @@
-import { invoiceTotals, itemAmount } from '../../lib/money'
 import { can } from '../../lib/permissions'
 import type {
   Client,
@@ -6,7 +5,6 @@ import type {
   ClientInsert,
   CommentTarget,
   Deliverable,
-  InvoiceItem,
   Lead,
   LeadActivity,
   LeadStage,
@@ -42,6 +40,8 @@ import {
   visibleClientIds,
   writable,
 } from './store'
+import { mockAgreements } from './agreements'
+import { mockInvoiceSettings, mockInvoices } from './invoices'
 
 const isClientUser = (profile: Profile) => profile.role === 'client_admin' || profile.role === 'client_member'
 
@@ -159,11 +159,6 @@ function commentTargetOwner(type: CommentTarget, id: string): { client_id: strin
   return { client_id: target.client_id, project_id: type === 'project' ? target.id : (target.project_id ?? null) }
 }
 
-function nextInvoiceNumber(): string {
-  const highest = Math.max(0, ...db.invoices.map((invoice) => Number(invoice.number.split('/').pop())))
-  return `VX/26-27/${String(highest + 1).padStart(4, '0')}`
-}
-
 const SESSION_HOURS = 8
 const DEFAULT_PREFS: NotificationPrefs = {
   email: true,
@@ -271,7 +266,7 @@ function activityEvents(): ActivityEvent[] {
       client_id: row.client_id,
       kind: 'invoice',
       text: row.paid_at ? `Payment received for invoice ${row.number}` : `Invoice ${row.number} sent`,
-      at: row.paid_at ?? row.created_at,
+      at: row.paid_at ?? row.issued_at ?? row.created_at,
       deliverable_id: null,
     })
   }
@@ -285,17 +280,13 @@ export const mockData: DataLayer = {
         const profile = currentProfile()
         return profile ? toSession(profile) : null
       }),
+    signInWithIdentifier: () =>
+      run(() => {
+        throw new DataError('forbidden', 'Identifier sign-in requires the Supabase auth service.')
+      }),
     signInWithPassword: ({ email, password }) =>
       run(() => {
-        const address = email.trim().toLowerCase()
-        if (address === 'admin@vernex.in' && (password === 'admin@123' || !password)) {
-          const founderProfile = db.profiles.find((p) => p.role === 'vernex_founder')
-          if (founderProfile) {
-            founderProfile.email = 'admin@vernex.in'
-            setCurrentProfileId(founderProfile.id)
-            return toSession(founderProfile)
-          }
-        }
+        if (!password) throw new DataError('invalid', 'Enter a password.')
         const profile = profileByEmail(email)
         if (!profile) {
           throw new DataError('not_found', 'Invalid email or password.')
@@ -372,6 +363,7 @@ export const mockData: DataLayer = {
         guard('client', 'delete', id)
         const invoiceIds = new Set(db.invoices.filter((row) => row.client_id === id).map((row) => row.id))
         removeWhere(db.invoice_items, (row) => invoiceIds.has(row.invoice_id))
+        removeWhere(db.invoice_events, (row) => invoiceIds.has(row.invoice_id))
         removeWhere(db.clients, (row) => row.id === id)
         removeWhere(db.profiles, (row) => row.client_id === id)
         const tenantTables = [
@@ -846,83 +838,8 @@ export const mockData: DataLayer = {
       run(() => Object.assign(writable(db.service_requests, id, 'service_request', 'edit'), patch)),
   },
 
-  invoices: {
-    list: (filter = {}) =>
-      run(() => {
-        const profile = guard('invoice', 'view', filter.client_id)
-        return visible(db.invoices, profile).filter(
-          (row) =>
-            (!filter.client_id || row.client_id === filter.client_id) &&
-            // A client sees an invoice once it has been sent.
-            !(isClientUser(profile) && row.status === 'draft'),
-        )
-      }),
-    get: (id) =>
-      run(() => {
-        const invoice = readOne(db.invoices, id, 'invoice')
-        if (isClientUser(me()) && invoice.status === 'draft') throw new DataError('not_found', `No invoice ${id}`)
-        return { ...invoice, items: db.invoice_items.filter((item) => item.invoice_id === id) }
-      }),
-    create: (input) =>
-      run(() => {
-        guard('invoice', 'create', input.client_id)
-        if (input.items.length === 0) throw new DataError('invalid', 'An invoice needs at least one line item.')
-        const { items: itemInputs, ...rest } = input
-        const invoice = {
-          project_id: null,
-          milestone_id: null,
-          status: 'draft' as const,
-          ...rest,
-          ...invoiceTotals(itemInputs),
-          id: newId(),
-          number: nextInvoiceNumber(),
-          currency: 'INR' as const,
-          amount_paid_minor: 0,
-          paid_at: null,
-          created_at: nowIso(),
-        }
-        const items: InvoiceItem[] = itemInputs.map((item) => ({
-          id: newId(),
-          invoice_id: invoice.id,
-          description: item.description,
-          sac_code: item.sac_code ?? null,
-          quantity: item.quantity ?? 1,
-          unit_price_minor: item.unit_price_minor,
-          amount_minor: itemAmount(item),
-        }))
-        db.invoices.push(invoice)
-        db.invoice_items.push(...items)
-        return { ...invoice, items }
-      }),
-    update: (id, { items, ...patch }) =>
-      run(() => {
-        const invoice = writable(db.invoices, id, 'invoice', 'edit')
-        if (items) {
-          if (items.length === 0) throw new DataError('invalid', 'An invoice needs at least one line item.')
-          removeWhere(db.invoice_items, (row) => row.invoice_id === id)
-          db.invoice_items.push(
-            ...items.map((item) => ({
-              id: newId(),
-              invoice_id: id,
-              description: item.description,
-              sac_code: item.sac_code ?? null,
-              quantity: item.quantity ?? 1,
-              unit_price_minor: item.unit_price_minor,
-              amount_minor: itemAmount(item),
-            })),
-          )
-          Object.assign(invoice, invoiceTotals(items))
-        }
-        return Object.assign(invoice, patch)
-      }),
-    remove: (id) =>
-      run(() => {
-        writable(db.invoices, id, 'invoice', 'delete')
-        removeWhere(db.invoice_items, (row) => row.invoice_id === id)
-        removeWhere(db.action_items, (row) => row.ref_id === id)
-        removeWhere(db.invoices, (row) => row.id === id)
-      }),
-  },
+  invoices: mockInvoices,
+  invoiceSettings: mockInvoiceSettings,
 
   actionItems: {
     list: (filter = {}) =>
@@ -1404,7 +1321,7 @@ export const mockData: DataLayer = {
         guard('onboarding', 'view', clientId)
         const agreement_signed = db.documents.some(
           (doc) => doc.client_id === clientId && doc.kind === 'agreement' && doc.status === 'signed',
-        )
+        ) || db.agreements.some((agreement) => agreement.client_id === clientId && agreement.status === 'signed')
         const first_invoice_paid = db.invoices.some((inv) => inv.client_id === clientId && inv.status === 'paid')
         return { agreement_signed, first_invoice_paid }
       }),
@@ -1472,6 +1389,8 @@ export const mockData: DataLayer = {
         removeWhere(db.documents, (d) => d.id === id)
       }),
   },
+
+  agreements: mockAgreements,
 
   templates: {
     list: () =>

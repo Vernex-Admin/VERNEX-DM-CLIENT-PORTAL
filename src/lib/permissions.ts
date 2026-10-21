@@ -13,6 +13,7 @@ export type Resource =
   | 'revision'
   | 'service_request'
   | 'invoice'
+  | 'invoice_settings'
   | 'action_item'
   | 'brand_asset'
   | 'comment'
@@ -47,6 +48,9 @@ const STAFF: readonly Permission[] = [
   ...crud('milestone'),
   ...crud('deliverable'),
   ...crud('invoice'),
+  // Company defaults, payment mode and invoice images for the Invoice Generator.
+  'invoice_settings:view',
+  'invoice_settings:edit',
   ...crud('service_request'),
   ...crud('action_item'),
   ...crud('lead'),
@@ -70,8 +74,8 @@ const STAFF: readonly Permission[] = [
 ]
 
 // Client roles: view their own client's data, plus client actions.
-// Deliberately absent: internal_comment, lead, founder_inbox, templates, and every create/edit/delete
-// on clients, client users, projects, milestones, deliverables and invoices.
+// Deliberately absent: internal_comment, lead, founder_inbox, templates, invoice_settings, and every
+// create/edit/delete on clients, client users, projects, milestones, deliverables and invoices.
 const CLIENT: readonly Permission[] = [
   'client:view',
   'client_user:view',

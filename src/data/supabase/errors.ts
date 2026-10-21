@@ -3,6 +3,14 @@ import { DataError } from '../types'
 
 type PgLike = { code?: string; message?: string; status?: number }
 
+/**
+ * PostgREST / Postgres codes for "that table, column or function does not exist": the database is
+ * behind the app (a migration in supabase/migrations has not been applied), not a network problem.
+ */
+const MISSING_SCHEMA = new Set(['PGRST205', 'PGRST202', 'PGRST204', '42P01', '42703', '42883'])
+export const NOT_SET_UP_MESSAGE =
+  "This needs a database update that hasn't been installed yet. A Vernex admin must apply the latest Supabase migrations."
+
 /** Replacement messages by Postgres / PostgREST code, for one call. */
 export type ErrorMessages = Partial<Record<string, string>>
 
@@ -15,6 +23,11 @@ export function toDataError(error: PgLike, messages: ErrorMessages = {}): DataEr
   const code = error.code ?? ''
   const message = error.message ?? ''
 
+  if (MISSING_SCHEMA.has(code)) {
+    // Whoever deployed it can see exactly what is missing; people see a plain sentence.
+    console.error(`Supabase schema is out of date (${code}): ${message}. Apply supabase/migrations with \`supabase db push\`.`)
+    return new DataError('not_set_up', NOT_SET_UP_MESSAGE)
+  }
   if (code === 'P0001') return new DataError('invalid', message)
   if (code === '42501' || /row-level security/i.test(message)) {
     return new DataError('forbidden', messages['42501'] ?? "You don't have permission to do that.")

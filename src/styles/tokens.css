@@ -9,4 +9,11 @@
   --info: #2C5F8A;
   --bad: #B42318;
   --warn: #A15C07;
+  /* Vernex brand, used on printed invoices. */
+  --brand-navy: #0F2A45;
+  --brand-gold: #B98A35;
+  --invoice-line: #AEB8C3;
+  --invoice-text: #1F2933;
+  --invoice-label: #3E4A56;
+  --invoice-desk: #E9E7E3;
 }

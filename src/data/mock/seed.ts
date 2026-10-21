@@ -24,8 +24,11 @@ import type {
   OnboardingItemTemplate,
   OnboardingItem,
   ClientDocument,
+  Agreement,
+  AgreementTemplate,
   MessageTemplate,
 } from '../../types/db'
+import { BUILT_IN_DEFAULTS } from '../../lib/invoiceDocument'
 
 // Seed data for the mock data layer.
 //
@@ -649,6 +652,10 @@ function invoicesAndItems(): { invoices: Invoice[]; items: InvoiceItem[] } {
       status,
       currency: 'INR',
       subtotal_minor: subtotal,
+      discount_minor: 0,
+      taxable_minor: subtotal,
+      tax_mode: 'cgst_sgst',
+      gst_rate: 18,
       cgst_minor: tax,
       sgst_minor: tax,
       igst_minor: 0,
@@ -657,6 +664,13 @@ function invoicesAndItems(): { invoices: Invoice[]; items: InvoiceItem[] } {
       issue_date: day(issued),
       due_date: day(due),
       paid_at: status === 'paid' ? at(due - 2) : null,
+      // Made with the quick form, before the Invoice Generator.
+      document: null,
+      revision: 1,
+      revision_of: null,
+      superseded_by: null,
+      issued_at: null,
+      updated_at: at(issued),
       created_at: at(issued),
     })
     items.push({
@@ -667,6 +681,8 @@ function invoicesAndItems(): { invoices: Invoice[]; items: InvoiceItem[] } {
       quantity: 1,
       unit_price_minor: subtotal,
       amount_minor: subtotal,
+      position: 1,
+      bill_period: '',
     })
   }
 
@@ -1134,7 +1150,10 @@ export function agkOnboardingItems(): OnboardingItem[] {
   })
 }
 
-export type MockDatabase = { [K in keyof Tables]: Tables[K][] }
+/** Every table, plus the bodies of uploaded invoice images (Supabase keeps those in storage). */
+export type MockDatabase = { [K in keyof Tables]: Tables[K][] } & {
+  invoice_assets: { path: string; data_url: string }[]
+}
 
 export function createSeed(): MockDatabase {
   const { invoices, items } = invoicesAndItems()
@@ -1153,6 +1172,10 @@ export function createSeed(): MockDatabase {
     service_requests: serviceRequests(),
     invoices,
     invoice_items: items,
+    invoice_events: [],
+    invoice_templates: [],
+    invoice_settings: [{ defaults: structuredClone(BUILT_IN_DEFAULTS), payment_mode: 'mock', gateway_configured: false, updated_at: null }],
+    invoice_assets: [],
     action_items: actionItems(),
     feedback: feedback(),
     social_metrics_daily: socialMetrics(),
@@ -1164,6 +1187,23 @@ export function createSeed(): MockDatabase {
     onboarding_item_templates: onboardingItemTemplates(),
     onboarding_items: agkOnboardingItems(),
     documents: documents(),
+    agreement_templates: [
+      {
+        id: 'agreement-template-default',
+        name: 'Vernex Services Agreement',
+        content: {
+          projectTitle: '', agreementDate: '', startDate: '', endDate: '', clientName: '', clientEmail: '',
+          services: '', scope: '', paymentTerms: '', developerName: '', companyName: 'VerneX',
+          companySigner: 'BOSS ANANDAA', companyTitle: 'CEO & Founder', clauses: [],
+        },
+        is_active: true,
+        created_by: founder,
+        created_at: at(-90),
+        updated_at: at(-90),
+      } satisfies AgreementTemplate,
+    ],
+    agreements: [] as Agreement[],
+    agreement_events: [],
     message_templates: messageTemplates(),
   }
 }

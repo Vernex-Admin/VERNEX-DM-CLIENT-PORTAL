@@ -1,5 +1,11 @@
 ﻿@import 'tailwindcss';
 @import './tokens.css';
+/* Invoice fonts, self-hosted so the screen, print and the PDF export use the same files. */
+@import '@fontsource/arimo/400.css';
+@import '@fontsource/arimo/400-italic.css';
+@import '@fontsource/arimo/700.css';
+@import '@fontsource/arimo/700-italic.css';
+@import '@fontsource/cormorant-garamond/700.css';
 
 @source not '../../docs';
 
@@ -28,6 +34,8 @@
   --color-info: var(--info);
   --color-bad: var(--bad);
   --color-warn: var(--warn);
+  --color-navy: var(--brand-navy);
+  --color-gold: var(--brand-gold);
 }
 
 @theme {
@@ -97,4 +105,184 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.agreement-editor-toolbar { min-height: 3.25rem; }
+.agreement-editor-controls { max-height: calc(100vh - 9rem); overflow-y: auto; overscroll-behavior: contain; }
+.agreement-preview { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: .5rem; }
+.agreement-zoom-toolbar { display: flex; min-height: 2.75rem; align-items: center; justify-content: flex-end; gap: .35rem; }
+.agreement-zoom-button { border: 1px solid var(--rule); border-radius: .5rem; background: var(--surface); padding: .4rem .65rem; color: var(--ink-muted); font-size: .75rem; }
+.agreement-zoom-button:hover, .agreement-zoom-button.active { border-color: var(--signal); color: var(--ink); background: color-mix(in srgb, var(--signal) 8%, white); }
+.agreement-preview-viewport { height: calc(100vh - 12rem); min-height: 34rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: .75rem; background: #e9e7e3; padding: 1.5rem; }
+.agreement-preview-pdf-frame { display: block; width: 100%; height: 100%; min-height: 34rem; border: 0; background: #fff; }
+.agreement-preview-message { display: grid; min-height: 34rem; place-items: center; color: var(--ink-muted); font-size: .9rem; }
+.agreement-preview-message.error { color: #b42318; }
+.agreement-preview-stage { width: max-content; margin: 0 auto; }
+.agreement-page { position: relative; box-sizing: border-box; width: 210mm; min-height: 297mm; border: 1px solid #ddd8d1; background: repeating-linear-gradient(to bottom, #fff 0, #fff 297mm, #e9e7e3 297mm, #e9e7e3 calc(297mm + 3mm)); box-shadow: 0 4px 20px rgb(29 25 20 / 12%); color: #171717; font-family: Georgia, 'Times New Roman', serif; }
+.agreement-letterhead { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #dfd9d0; padding: 8mm 18mm 4mm; font: 9pt/1.45 Arial, sans-serif; text-align: right; }
+.agreement-letterhead img { display: block; width: 42mm; height: 17mm; object-fit: contain; object-position: left center; }
+.agreement-content { box-sizing: border-box; display: flex; flex-direction: column; padding: 9mm 18mm 18mm; }
+.agreement-date { margin-bottom: 5mm; text-align: right; font: 9pt Arial, sans-serif; }
+.agreement-preamble { margin-bottom: 5mm; font: 10pt/1.5 Arial, sans-serif; }
+.agreement-preamble h2 { margin: 0 0 2mm; font: bold 14pt/1.3 Georgia, 'Times New Roman', serif; text-align: center; text-decoration: underline; text-underline-offset: 2px; }
+.agreement-preamble h3 { margin: 0 0 5mm; font: bold 12pt/1.35 Georgia, 'Times New Roman', serif; text-align: center; text-transform: uppercase; }
+.agreement-preamble-line, .agreement-party { margin: 2mm 0; }
+.agreement-party { padding-left: 5mm; }
+.agreement-and { margin: 2mm 0; font-weight: 700; text-align: center; }
+.agreement-preamble h4 { margin: 5mm 0 2mm; border-top: 1px solid #ddd8d1; padding-top: 3mm; font: bold 9pt Arial, sans-serif; letter-spacing: .14em; text-align: center; text-decoration: underline; text-underline-offset: 2px; }
+.agreement-details { display: flex; flex-direction: column; gap: 1mm; margin: 0 0 4mm; border-block: 1px solid #ddd8d1; padding: 3mm 0; font: 9pt/1.45 Arial, sans-serif; }
+.agreement-details p { margin: 0; overflow-wrap: anywhere; }
+.agreement-clauses { display: flex; flex-direction: column; gap: 3.5mm; font: 9.5pt/1.48 Arial, sans-serif; }
+.agreement-clause { min-width: 0; }
+.agreement-clause-title { margin: 0 0 1mm; font: bold 10pt/1.35 Arial, sans-serif; }
+.agreement-clause p { margin: 0; overflow-wrap: anywhere; text-align: justify; white-space: pre-wrap; }
+.agreement-signatures { margin-top: 9mm; border-top: 1px solid #ddd8d1; padding-top: 5mm; font: 9pt/1.45 Arial, sans-serif; }
+.agreement-signatures h3 { margin: 0; font: bold 13pt Georgia, 'Times New Roman', serif; text-align: center; }
+.agreement-signature-note { margin: 2mm 0 5mm; text-align: center; }
+.agreement-signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; }
+.agreement-signature-block { display: flex; min-width: 0; flex-direction: column; gap: 2mm; }
+.agreement-signature-image { display: flex; height: 24mm; align-items: center; justify-content: flex-start; border-bottom: 1px solid #888; }
+.agreement-signature-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.agreement-page-number { margin: 8mm 0 0; color: #6b625a; font: 8pt Arial, sans-serif; text-align: center; }
+.agreement-closing-page { position: relative; box-sizing: border-box; width: 210mm; height: 297mm; overflow: hidden; flex: none; background: #fff; box-shadow: 0 4px 20px rgb(29 25 20 / 12%); container-type: inline-size; }
+.agreement-closing-art { display: block; width: 100%; height: 100%; object-fit: fill; }
+.agreement-closing-client-signature { position: absolute; left: 48.5%; top: 75.8%; width: 27%; height: 6.2%; object-fit: contain; object-position: left center; }
+.agreement-closing-client-name { position: absolute; left: 63.2%; top: 82.25%; width: 22%; height: 2.5%; overflow: hidden; background: #fff; color: #171717; font: clamp(5px, 1.2cqw, 10px)/1.3 Arial, sans-serif; white-space: nowrap; }
+.agreement-closing-client-name.long { font-size: clamp(4px, .8cqw, 7px); }
+.agreement-closing-time { position: absolute; top: 90.4%; width: 43%; height: 4.8%; overflow: hidden; color: #171717; font: clamp(5px, .85cqw, 8px)/1.25 Arial, sans-serif; }
+.agreement-closing-time.founder-time { left: 9.5%; }
+.agreement-closing-time.client-time { left: 50%; }
+.client-agreement-closing { width: 100%; overflow-x: auto; }
+.client-agreement-closing .agreement-closing-page { width: min(100%, 210mm); height: auto; aspect-ratio: 210 / 297; }
+@media (max-width: 1023px) {
+  .agreement-editor-controls { max-height: none; overflow: visible; }
+  .agreement-preview-viewport { height: 72vh; min-height: 30rem; }
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+    @bottom-center {
+      content: "Page " counter(page);
+      color: #6b625a;
+      font: 8pt Arial, sans-serif;
+      vertical-align: top;
+      padding-top: 3mm;
+    }
+  }
+  html, body { width: auto !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .admin-shell-header, .admin-shell-sidebar, .admin-shell-mobile-nav, .no-print { display: none !important; }
+  .admin-shell-main { margin: 0 !important; padding: 0 !important; }
+  .agreement-editor, .agreement-editor-layout, .agreement-preview { display: block !important; width: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
+  .agreement-preview-viewport { height: auto !important; min-height: 0 !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; padding: 0 !important; }
+  .agreement-preview-stage { width: auto !important; margin: 0 !important; zoom: 1 !important; }
+  .agreement-page { width: auto !important; min-height: 0 !important; margin: 0 !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; box-shadow: none !important; break-after: auto !important; page-break-after: auto !important; }
+  .agreement-letterhead { position: static; z-index: auto; height: auto; margin: 0 18mm; border: 0; padding: 14mm 0 4mm; background: #fff; }
+  .agreement-content { display: block !important; padding: 6mm 0 15mm !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .agreement-date, .agreement-preamble, .agreement-details, .agreement-clause-title { margin-left: 18mm !important; margin-right: 18mm !important; }
+  .agreement-print-flow-text { padding-left: 18mm; padding-right: 18mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .agreement-signatures { margin: 22mm 18mm 0 !important; }
+  .agreement-clauses { gap: 3mm; }
+  .agreement-clause { break-inside: auto; page-break-inside: auto; }
+  .agreement-clause-title { break-after: avoid; page-break-after: avoid; }
+  .agreement-preamble h2, .agreement-preamble h3, .agreement-preamble h4 { break-after: avoid; page-break-after: avoid; }
+  .agreement-signatures { break-before: page; page-break-before: always; break-inside: avoid; page-break-inside: avoid; }
+  .agreement-signature-block { break-inside: avoid; page-break-inside: avoid; }
+  .agreement-page-number { display: none !important; }
+  .agreement-closing-page { width: 210mm !important; height: 297mm !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; break-before: page !important; page-break-before: always !important; break-after: auto !important; page-break-after: auto !important; }
+  .agreement-closing-time { font-size: 6pt !important; }
+  .agreement-closing-client-name { font-size: 8pt !important; }
+  .agreement-closing-client-name.long { font-size: 6pt !important; }
+}
+
+/* ---------------------------------------------------------------------------
+   Invoice (Invoice Generator, client invoice view). True A4 portrait: every page is 210 x 297mm
+   with 8mm padding. Page breaks are planned in src/lib/invoicePagination.ts from a hidden,
+   measured copy, so the preview, the printout and the downloaded PDF show the same pages.
+   Fonts are self-hosted (@fontsource) so the screen and the PDF use the same files.
+   --------------------------------------------------------------------------- */
+.ivx-desk { height: calc(100dvh - 15rem); min-height: 30rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: var(--radius-card); background: var(--invoice-desk); padding: 20px; }
+.ivx-stage { width: max-content; margin: 0 auto; }
+.ivx-stage.editing { padding-right: 100px; padding-left: 70px; }
+.ivx-sheet, .ivx-page { position: relative; box-sizing: border-box; width: 210mm; padding: 8mm; background: #fff; color: var(--invoice-text); font: 9pt/1.35 Arimo, Arial, sans-serif; text-align: left; outline: 1px solid #D9D4CC; }
+.ivx-sheet { min-height: 297mm; }
+.ivx-page { height: 297mm; overflow: hidden; }
+.ivx-pages { display: flex; flex-direction: column; gap: 8mm; }
+.ivx-sheet *, .ivx-sheet *::before, .ivx-sheet *::after, .ivx-page *, .ivx-page *::before, .ivx-page *::after { box-sizing: border-box; }
+.ivx-page-number { position: absolute; right: 8mm; bottom: 4mm; color: var(--invoice-label); font-size: 8pt; }
+.ivx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8mm; }
+.ivx-brand { display: flex; width: 72mm; flex-direction: column; align-items: center; gap: 1mm; }
+.ivx-logo { display: block; width: 56mm; height: 19mm; object-fit: contain; }
+.ivx-logo-empty { display: grid; width: 56mm; height: 19mm; place-items: center; border: 1px dashed var(--invoice-line); color: var(--invoice-label); font-size: 8pt; }
+.ivx-tagline { width: 100%; color: var(--brand-navy); font-weight: 700; font-size: 10.5pt; text-align: center; }
+.ivx-contact { display: grid; width: 88mm; grid-template-columns: 20mm 1fr; align-items: end; column-gap: 3mm; row-gap: 1.2mm; margin: 0; font-size: 8.5pt; }
+.ivx-contact dt { color: var(--brand-navy); font-weight: 700; }
+.ivx-contact dd { margin: 0; min-height: 5mm; border-bottom: 1px solid var(--brand-gold); padding-bottom: .4mm; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ivx-gold-rule { margin: 2.5mm 0; border: 0; border-top: 1px solid var(--brand-gold); }
+.ivx-title-row { display: flex; align-items: stretch; justify-content: space-between; gap: 8mm; margin-top: 2mm; }
+.ivx-title { margin: 0; color: var(--brand-navy); font: 700 34pt/0.95 'Cormorant Garamond', Georgia, 'Times New Roman', serif; letter-spacing: .01em; }
+.ivx-subtitle { margin: 1.5mm 0 0; color: var(--brand-navy); font-weight: 700; font-size: 9.5pt; letter-spacing: .12em; }
+.ivx-meta { display: grid; width: 88mm; grid-template-columns: 34mm 1fr; align-items: end; column-gap: 3mm; row-gap: 1.2mm; margin: 0; border-left: 1px solid var(--brand-gold); padding-left: 4mm; font-size: 8.5pt; }
+.ivx-meta dt, .ivx-party dt { color: var(--invoice-label); }
+.ivx-meta dd, .ivx-party dd { margin: 0; min-height: 5mm; border-bottom: 1px solid var(--invoice-line); padding-bottom: .4mm; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ivx-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 9mm; margin-top: 4mm; }
+.ivx-bar { margin: 0 0 2mm; border-radius: 1.5mm; background: var(--brand-navy); padding: 2.2mm 3mm; color: #fff; font: 700 9.5pt/1.2 Arimo, Arial, sans-serif; }
+.ivx-party dl { display: grid; grid-template-columns: 38mm 1fr; align-items: end; column-gap: 3mm; row-gap: 1mm; margin: 0; padding: 0 1.5mm; font-size: 8.5pt; }
+.ivx-continued { display: flex; align-items: baseline; justify-content: space-between; gap: 6mm; border-bottom: 1px solid var(--brand-gold); padding-bottom: 2mm; color: var(--brand-navy); font-weight: 700; font-size: 9pt; }
+.ivx-continued-title { font: 700 18pt/1 'Cormorant Garamond', Georgia, 'Times New Roman', serif; }
+.ivx-block-table { padding-top: 4mm; }
+.ivx-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }
+.ivx-table th { border: 1px solid var(--invoice-line); background: var(--brand-navy); padding: 2mm 1.2mm; color: #fff; font-weight: 700; text-align: center; text-transform: uppercase; }
+.ivx-table td { position: relative; border: 1px solid var(--invoice-line); padding: 1.3mm 1.8mm; vertical-align: top; overflow-wrap: anywhere; }
+.ivx-table tbody tr { height: 6.8mm; }
+.ivx-table .ivx-no { color: var(--invoice-label); text-align: center; }
+.ivx-table .ivx-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ivx-table .ivx-center { text-align: center; }
+.ivx-table .ivx-desc { white-space: pre-wrap; }
+.ivx-row-tools { position: absolute; top: 50%; left: calc(100% + 8mm + 8px); display: flex; gap: 2px; transform: translateY(-50%); }
+.ivx-row-tools button { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid var(--rule); border-radius: var(--radius-field); background: var(--surface); color: var(--ink-muted); }
+.ivx-row-tools button:hover:not(:disabled) { border-color: var(--ink-muted); color: var(--ink); }
+.ivx-row-tools button:disabled { opacity: .35; }
+/* Editing only: where each later page begins. */
+.ivx-page-start td { border-top: 2px dashed var(--brand-gold); }
+.ivx-break-label { position: absolute; top: -9px; right: calc(100% + 8mm + 6px); white-space: nowrap; border-radius: var(--radius-field); background: var(--brand-gold); padding: 1px 6px; color: #fff; font-size: 11px; font-weight: 700; }
+.ivx-add-row { margin-top: 2mm; }
+.ivx-block-closing { padding-top: 3mm; }
+.ivx-bottom { display: grid; grid-template-columns: 1fr 96mm; gap: 8mm; }
+.ivx-pay { display: flex; flex-direction: column; align-items: flex-start; gap: 1.5mm; padding-left: 12mm; }
+.ivx-qr { display: block; width: 30mm; height: 30mm; object-fit: contain; }
+.ivx-pay-label { width: 30mm; color: var(--brand-navy); font-weight: 700; font-size: 9pt; text-align: center; }
+.ivx-pay-note { max-width: 70mm; color: var(--invoice-label); font-size: 8pt; white-space: pre-wrap; }
+.ivx-totals dl { display: grid; grid-template-columns: 1fr 40mm; align-items: end; column-gap: 3mm; row-gap: .8mm; margin: 0 0 2.5mm; font-size: 8.5pt; }
+.ivx-totals dt { color: var(--invoice-label); text-align: right; }
+.ivx-totals dd { margin: 0; min-height: 5mm; border-bottom: 1px solid var(--invoice-line); padding-bottom: .4mm; text-align: right; font-variant-numeric: tabular-nums; }
+.ivx-due { display: flex; align-items: center; justify-content: space-between; gap: 4mm; border-radius: 1.5mm; background: var(--brand-navy); padding: 2.8mm 5mm; color: #fff; font-weight: 700; font-size: 9.5pt; }
+.ivx-due strong { min-width: 34mm; border-bottom: 1px solid #fff; padding-bottom: .5mm; font-size: 11pt; text-align: right; font-variant-numeric: tabular-nums; }
+.ivx-foot { margin-top: 3mm; }
+.ivx-foot .ivx-gold-rule:last-child { margin-bottom: 0; }
+.ivx-thanks { margin: 0; font-weight: 700; font-style: italic; font-size: 10.5pt; }
+.ivx-closing { display: flex; justify-content: space-between; gap: 6mm; margin-top: 1.5mm; font-weight: 700; font-size: 9pt; }
+.ivx-stamp { position: absolute; top: 38mm; right: 10mm; border: 2px solid currentColor; border-radius: 1.5mm; padding: 1mm 3mm; font: 700 11pt/1.2 Arimo, Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; transform: rotate(-8deg); }
+.ivx-stamp.ok { color: var(--ok); }
+.ivx-stamp.bad { color: var(--bad); }
+/* Editing: inputs sit on the same underline as the printed values. */
+.ivx-input { display: block; width: 100%; min-height: 5mm; border: 0; border-radius: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: inherit; }
+.ivx-input:hover { background: #F6F4F0; }
+.ivx-input:focus { background: #FFF8E8; outline: 1px solid var(--brand-gold); outline-offset: 1px; }
+.ivx-input::placeholder { color: #A3ABB4; }
+.ivx-input[aria-invalid="true"] { background: #FDECEA; outline: 1px solid var(--bad); }
+textarea.ivx-input { resize: none; overflow: hidden; line-height: inherit; }
+.ivx-split { display: flex; align-items: center; gap: 1.5mm; }
+.ivx-split .ivx-input { min-width: 0; }
+/* Hidden copies: laid out (so they can be measured and exported) but off screen. */
+.ivx-measure, .ivx-print-root { position: fixed; top: 0; left: -10000mm; visibility: hidden; pointer-events: none; }
+@page vx-invoice { size: A4 portrait; margin: 0; @bottom-center { content: none; } }
+@media print {
+  /* Only the pages print. The measuring copy stays laid out (off the page) so the plan never changes mid-print. */
+  body:has(> .ivx-print-root) > :not(.ivx-print-root):not(.ivx-measure) { display: none !important; }
+  body:has(> .ivx-print-root) { background: #fff !important; }
+  .ivx-print-root { position: static; left: auto; visibility: visible; page: vx-invoice; }
+  .ivx-print-root .ivx-pages { gap: 0; }
+  .ivx-print-root .ivx-page { outline: 0; break-after: page; page-break-after: always; }
+  .ivx-print-root .ivx-page:last-child { break-after: auto; page-break-after: auto; }
 }

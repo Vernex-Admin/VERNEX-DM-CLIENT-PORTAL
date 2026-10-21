@@ -40,10 +40,24 @@ import type {
   DeliverableVersion,
   RevisionType,
   ClientDocument,
+  Agreement,
+  AgreementEvent,
+  AgreementTemplate,
   MessageTemplate,
   OnboardingItem,
   ServiceType,
 } from '../types/db'
+import type { AgreementContent } from '../types/agreement'
+import type { DuplicateMode } from '../lib/invoiceDocument'
+import type {
+  InvoiceDocument,
+  InvoiceDraftInput,
+  InvoiceEvent,
+  InvoiceSettings,
+  InvoiceSettingsInput,
+  InvoiceTemplate,
+  PaymentStatusInput,
+} from '../types/invoiceDocument'
 
 // The contract every backend implements. The mock implements it today; a Supabase
 // implementation replaces it later. Screens never import this folder: they go through
@@ -52,7 +66,8 @@ import type {
 // Every method returns only the rows the signed-in user may see, and rejects with a
 // DataError when they may not do something.
 
-export type DataErrorCode = 'forbidden' | 'not_found' | 'invalid' | 'signed_out'
+/** `not_set_up`: the database lacks a table, column or function this needs (a migration is not applied). */
+export type DataErrorCode = 'forbidden' | 'not_found' | 'invalid' | 'signed_out' | 'not_set_up'
 
 export class DataError extends Error {
   readonly code: DataErrorCode
@@ -72,6 +87,8 @@ export type AuthSession = { user: AuthUser; expires_at: string }
 
 export interface AuthRepo {
   getSession(): Promise<AuthSession | null>
+  /** Authenticates an email or Client Code through a server-side Supabase lookup. */
+  signInWithIdentifier(input: { identifier: string; password: string }): Promise<AuthSession>
   /** Realtime sign-in with email and password. */
   signInWithPassword(input: { email: string; password?: string }): Promise<AuthSession>
   /** Sends a sign-in link. Like Supabase, it does not reveal whether the email has an account. */
@@ -222,10 +239,48 @@ export type InvoicePatch = Update<Invoice> & { items?: InvoiceItemInsert[] }
 export interface InvoicesRepo {
   list(filter?: ClientFilter): Promise<Invoice[]>
   get(id: string): Promise<InvoiceWithItems>
-  /** Totals and GST are computed from the items. */
+  /** Quick form: totals and GST (CGST 9% + SGST 9%) are computed from the items. */
   create(input: InvoiceInsert): Promise<InvoiceWithItems>
+  /** Quick form. An issued generator invoice only takes payment status changes. */
   update(id: string, patch: InvoicePatch): Promise<Invoice>
+  /** Drafts and quick-form invoices only: an issued generator invoice is cancelled, never deleted. */
   remove(id: string): Promise<void>
+
+  // Invoice Generator. The server validates the document and computes every total from it.
+  /** Creates (`id` null) or updates a draft. Issued invoices are refused. */
+  saveDraft(input: InvoiceDraftInput): Promise<InvoiceWithItems>
+  /** Draft to issued: the content is frozen. Issuing a revision cancels the invoice it replaces. */
+  issue(id: string): Promise<Invoice>
+  /** A new draft revision of an issued, unpaid invoice. The original stays valid until it is issued. */
+  revise(id: string): Promise<Invoice>
+  /**
+   * A new draft copied from any invoice, with a fresh number and new rows; the source is untouched.
+   * `copy` keeps the billing period and dates it today; `next_month` moves everything on a month.
+   */
+  duplicate(id: string, mode: DuplicateMode): Promise<Invoice>
+  /** A person records a payment status by hand. Logged in the history; nothing here is automatic. */
+  setPaymentStatus(id: string, input: PaymentStatusInput): Promise<Invoice>
+  /** Staff only: the audit history, oldest first. */
+  events(id: string): Promise<InvoiceEvent[]>
+}
+
+export type InvoiceTemplateInput = { id?: string; name: string; document: InvoiceDocument }
+
+/** Staff only: company defaults, payment mode, invoice templates and uploaded invoice images. */
+export interface InvoiceSettingsRepo {
+  get(): Promise<InvoiceSettings>
+  /** Gateway mode is refused until the server reports a configured gateway. */
+  save(input: InvoiceSettingsInput): Promise<InvoiceSettings>
+  /** Stores a logo or QR image privately and returns its path. PNG, JPEG or WebP under 2 MB. */
+  uploadImage(kind: 'logo' | 'qr', file: File): Promise<string>
+  /**
+   * Viewable URLs for stored images, keyed by path. Staff get any; a client only those on their
+   * own issued invoices. Paths that cannot be shown are left out.
+   */
+  imageUrls(paths: string[]): Promise<Record<string, string>>
+  templates(): Promise<InvoiceTemplate[]>
+  saveTemplate(input: InvoiceTemplateInput): Promise<InvoiceTemplate>
+  removeTemplate(id: string): Promise<void>
 }
 
 export type ActionItemFilter = { client_id?: string; open?: boolean }
@@ -397,6 +452,30 @@ export interface DocumentsRepo {
   remove(id: string): Promise<void>
 }
 
+export type AgreementDraftInput = {
+  client_id: string
+  template_id?: string | null
+  title: string
+  content: AgreementContent
+}
+
+export type AgreementTemplateInput = { id?: string; name: string; content: AgreementContent }
+
+export interface AgreementsRepo {
+  list(clientId?: string): Promise<Agreement[]>
+  get(id: string): Promise<Agreement>
+  events(id: string): Promise<AgreementEvent[]>
+  templates(): Promise<AgreementTemplate[]>
+  saveTemplate(input: AgreementTemplateInput): Promise<AgreementTemplate>
+  createDraft(input: AgreementDraftInput): Promise<Agreement>
+  updateDraft(id: string, input: Pick<AgreementDraftInput, 'title' | 'content'>): Promise<Agreement>
+  requestFounderSignature(id: string): Promise<Agreement>
+  founderSignAndSend(id: string, signature: Blob): Promise<Agreement>
+  clientSign(id: string, signature: Blob, consent: boolean, timeZone: string): Promise<Agreement>
+  cancel(id: string): Promise<Agreement>
+  generateFinalPdf(id: string): Promise<string>
+}
+
 export type TemplatePatch = Partial<Pick<MessageTemplate, 'title' | 'subject' | 'body'>>
 
 export interface TemplatesRepo {
@@ -415,6 +494,7 @@ export interface DataLayer {
   revisions: RevisionsRepo
   serviceRequests: ServiceRequestsRepo
   invoices: InvoicesRepo
+  invoiceSettings: InvoiceSettingsRepo
   actionItems: ActionItemsRepo
   comments: CommentsRepo
   files: FilesRepo
@@ -426,6 +506,7 @@ export interface DataLayer {
   activity: ActivityRepo
   onboarding: OnboardingRepo
   documents: DocumentsRepo
+  agreements: AgreementsRepo
   templates: TemplatesRepo
 }
 

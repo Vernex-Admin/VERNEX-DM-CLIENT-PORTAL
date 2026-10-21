@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
+import { Link } from 'react-router'
 import { Circle, CircleCheck, Download, ExternalLink, File as FileIcon, FileText, FolderOpen, Image as ImageIcon, Upload } from 'lucide-react'
 import { Icon } from '../../components/Icon'
 import { QueryError } from '../../components/QueryError'
@@ -9,8 +10,8 @@ import { brandChecklist, checklistPercent } from '../../lib/brandChecklist'
 import { formatDate } from '../../lib/dates'
 import { isSafeLink } from '../../lib/links'
 import { useCan } from '../../lib/permissions'
-import { useCurrentProfile, useDocuments, useFiles, useUploadBrandAsset } from '../../lib/queries'
-import type { ClientDocument, FileFolder, FileRecord } from '../../types/db'
+import { useAgreements, useCurrentProfile, useDocuments, useFiles, useUploadBrandAsset } from '../../lib/queries'
+import type { Agreement, ClientDocument, FileFolder, FileRecord } from '../../types/db'
 
 type TabFolder = Extract<FileFolder, 'brand_assets' | 'rendered_ads' | 'documents' | 'invoices'>
 
@@ -32,10 +33,19 @@ function formatSize(bytes: number | null): string {
 export default function VaultPage() {
   const { data: profile } = useCurrentProfile()
   const clientId = profile?.client_id ?? undefined
+  const agreements = useAgreements(clientId)
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       <h1 className="text-[1.6rem] leading-tight">Vault</h1>
+      {agreements.data && agreements.data.length > 0 && (
+        <section aria-label="Digital agreements" className="flex flex-col gap-2">
+          <h2 className="text-lg font-semibold">Digital agreements</h2>
+          <ul className="flex flex-col gap-2">
+            {agreements.data.map((agreement) => <AgreementItem key={agreement.id} agreement={agreement} />)}
+          </ul>
+        </section>
+      )}
       <Tabs
         label="Vault folders"
         items={TABS.map((tab) => ({
@@ -45,6 +55,36 @@ export default function VaultPage() {
         }))}
       />
     </div>
+  )
+}
+
+const AGREEMENT_STATUS: Record<Agreement['status'], string> = {
+  draft: 'Draft',
+  awaiting_founder_signature: 'Awaiting Founder Signature',
+  awaiting_client_signature: 'Awaiting Your Signature',
+  signed: 'Signed',
+  cancelled: 'Cancelled',
+}
+
+function AgreementItem({ agreement }: { agreement: Agreement }) {
+  return (
+    <li className="flex flex-wrap items-center gap-3 rounded-card border border-rule bg-surface p-3">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-field border border-rule bg-paper">
+        <Icon icon={FileText} size={20} className="text-ink-muted" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium" title={agreement.title}>{agreement.title}</p>
+        <p className="text-sm text-ink-muted">
+          {agreement.status === 'signed' && agreement.client_signed_at
+            ? `Signed ${formatDate(agreement.client_signed_at)}`
+            : agreement.sent_at ? `Sent ${formatDate(agreement.sent_at)}` : `Updated ${formatDate(agreement.updated_at)}`}
+        </p>
+      </div>
+      <Pill tone={agreement.status === 'signed' ? 'ok' : agreement.status === 'cancelled' ? 'neutral' : 'info'}>
+        {AGREEMENT_STATUS[agreement.status]}
+      </Pill>
+      <Link to={`/agreements/${agreement.id}`} className={actionLink}>Review</Link>
+    </li>
   )
 }
 

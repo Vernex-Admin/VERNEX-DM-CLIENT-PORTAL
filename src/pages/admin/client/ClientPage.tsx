@@ -79,7 +79,7 @@ export default function ClientPage() {
               Generate Agreement
             </Link>
             <Link
-              to={`/admin/clients/${data.id}/invoice`}
+              to={`/admin/invoices/new?client=${data.id}`}
               className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule bg-surface px-3 text-sm font-medium transition-colors duration-150 hover:bg-ink/5"
             >
               <Icon icon={Receipt} size={15} />

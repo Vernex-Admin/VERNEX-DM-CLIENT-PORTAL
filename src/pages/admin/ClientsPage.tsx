@@ -117,7 +117,7 @@ export default function ClientsPage() {
             Agreement
           </Link>
           <Link
-            to={`/admin/clients/${client.id}/invoice`}
+            to={`/admin/invoices/new?client=${client.id}`}
             className="inline-flex min-h-[28px] items-center rounded px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
             title="Generate Invoice"
           >

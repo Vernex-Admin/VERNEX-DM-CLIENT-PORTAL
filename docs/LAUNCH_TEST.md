@@ -5,7 +5,10 @@ Tick each box. If any "Expect" is wrong, stop and fix it before launch.
 
 ## 0. Before you start
 
-- [ ] SQL files `01` to `07` have run, in order, and every row of `07_check.sql` says OK. Also run `08_integrity.sql` (hardening).
+- [ ] SQL files `01` to `08` have run, and every row of `07_check.sql` says OK. Also run `10_client_code_login.sql`.
+- [ ] Deploy the `login-with-identifier` Edge Function. Its server-side `SUPABASE_SERVICE_ROLE_KEY` must stay in Supabase Edge Function secrets, never in the frontend.
+- [ ] Verify the Supabase project ref against the app's configured URL before provisioning. In a trusted shell, set `SUPABASE_URL`, matching `SUPABASE_PROJECT_REF`, and `SUPABASE_SERVICE_ROLE_KEY`, then run `npm run setup:admin`. Set `ADMIN_INITIAL_PASSWORD` only when `admin@vernex.in` does not already exist in Auth; existing passwords are preserved.
+- [ ] Assign a unique Client Code to every active profile using the example at the end of `10_client_code_login.sql`. Every user also needs an Auth password.
 - [ ] `.env.local` (or the host's settings) has `VITE_DATA_SOURCE=supabase`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The key is the anon / publishable key, never the service_role key.
 - [ ] Supabase: Authentication, URL Configuration lists your site address and `<site>/auth/callback` as redirect URLs. Google provider is on if you use it.
 - [ ] Open the app in 4 separate browser profiles (or private windows in different browsers) so sessions do not mix:
@@ -22,15 +25,13 @@ Tick each box. If any "Expect" is wrong, stop and fix it before launch.
 
 ## 1. Sign-in
 
-1. **F:** open `/admin/login`, enter the founder email, click **Send me a sign-in link**.
-   - Expect: "Check your email". No "Open the link (development)" button and no "Sign in as" list.
-2. Open the link from the inbox.
-   - Expect: you land in `/admin/clients`.
-3. **F:** sign out from the user menu, open `/admin/login`, enter `nobody-invited@example.com`.
-   - Expect: "This email isn't on the Vernex Hub list yet. Ask your Vernex contact to add you."
-4. Click **Send me a sign-in link** many times in a row with a valid email.
-   - Expect: Supabase's rate-limit message is shown as written, the button is disabled while sending.
-5. Sign in again as **F** with Google (if enabled). Expect: same landing page.
+1. **F:** open `/login`, enter the founder's Client Code and password.
+   - Expect: you land in `/admin/clients` based on the active profile returned by Supabase.
+2. Sign out and try an unknown code, then the correct code with a wrong password.
+   - Expect: both show the same generic invalid-code/password message.
+3. Submit invalid inputs and several wrong attempts.
+   - Expect: field validation is clear; after eight attempts from the same IP in 15 minutes, the Edge Function asks the user to wait.
+4. Sign in as a client user with their own code and password. Expect: they land in the client portal and cannot open admin screens.
 
 ## 2. Set up the two test clients (as F)
 
@@ -45,7 +46,7 @@ Tick each box. If any "Expect" is wrong, stop and fix it before launch.
 
 ## 3. PM scope
 
-1. **P:** sign in at `/admin/login` with the PM email.
+1. **P:** sign in at `/login` with the PM's Client Code and password.
    - Expect: **Clients** shows only Test Co A. Test Co B is absent.
 2. Paste Test Co B's address (`/admin/clients/<B id>`, copied from **F**).
    - Expect: "We can't find that client".

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Receipt } from 'lucide-react'
+import { Link } from 'react-router'
 import { QueryError } from '../../components/QueryError'
 import { Button, Drawer, EmptyState, Pill, Skeleton, Table, useToast } from '../../components/ui'
 import type { Column } from '../../components/ui'
 import { formatDate, istDay } from '../../lib/dates'
 import { INVOICE_STATUS } from '../../lib/labels'
 import { isUnpaid, owed } from '../../lib/invoices'
+import { monthLabel } from '../../lib/invoiceDocument'
+import { formatMoney, formatRate } from '../../lib/invoiceMath'
 import { formatINR } from '../../lib/money'
 import { useInvoice, useInvoices, useProjects } from '../../lib/queries'
 import type { Invoice } from '../../types/db'
@@ -32,19 +35,22 @@ export default function BillingPage() {
   const totals = useMemo(() => {
     const today = istDay(new Date())
     const year = today.slice(0, 4)
+    // The summary tiles are in rupees; invoices in other currencies are not added in.
+    const rupees = rows.filter((invoice) => invoice.currency === 'INR')
     return {
-      outstanding: rows.filter(isUnpaid).reduce((sum, invoice) => sum + owed(invoice), 0),
-      overdue: rows
+      outstanding: rupees.filter(isUnpaid).reduce((sum, invoice) => sum + owed(invoice), 0),
+      overdue: rupees
         .filter((invoice) => isUnpaid(invoice) && (invoice.status === 'overdue' || invoice.due_date < today))
         .reduce((sum, invoice) => sum + owed(invoice), 0),
-      paidThisYear: rows
+      paidThisYear: rupees
         .filter((invoice) => invoice.paid_at !== null && istDay(invoice.paid_at).startsWith(year))
         .reduce((sum, invoice) => sum + invoice.amount_paid_minor, 0),
     }
   }, [rows])
 
+  // No payment gateway is connected, so nothing here takes or confirms a payment.
   const payNow = () =>
-    toast({ title: 'Online payment is coming soon', description: 'For now, pay by bank transfer using the details on the invoice.' })
+    toast({ title: 'Online payment is not available yet', description: 'Use the payment details on the invoice, or contact Vernex.' })
 
   const columns: Column<Invoice>[] = [
     {
@@ -52,14 +58,16 @@ export default function BillingPage() {
       header: 'Invoice',
       mono: true,
       cell: (invoice) => (
-        <button type="button" onClick={() => setOpenId(invoice.id)} className="inline-flex min-h-[44px] items-center font-mono underline-offset-2 hover:underline">
+        <Link to={`/billing/invoices/${invoice.id}`} className="inline-flex min-h-[44px] items-center font-mono underline-offset-2 hover:underline">
           {invoice.number}
-        </button>
+        </Link>
       ),
     },
     { key: 'project', header: 'Project', cell: (invoice) => (invoice.project_id ? projectNames[invoice.project_id] : null) ?? 'General' },
+    { key: 'period', header: 'Billing period', cell: (invoice) => monthLabel(invoice.document?.billing_month ?? '') },
+    { key: 'issued', header: 'Issued', cell: (invoice) => formatDate(invoice.issued_at ?? invoice.issue_date) },
     { key: 'due', header: 'Due', cell: (invoice) => formatDate(invoice.due_date) },
-    { key: 'amount', header: 'Amount', align: 'right', mono: true, cell: (invoice) => formatINR(invoice.total_minor) },
+    { key: 'amount', header: 'Amount', align: 'right', mono: true, cell: (invoice) => formatMoney(invoice.total_minor, invoice.currency) },
     {
       key: 'status',
       header: 'Status',
@@ -73,8 +81,15 @@ export default function BillingPage() {
       header: 'Actions',
       cell: (invoice) => (
         <span className="inline-flex flex-wrap justify-end gap-2">
-          <Button size="sm" onClick={() => setOpenId(invoice.id)} aria-label={`View ${invoice.number}`}>
-            View
+          <Link
+            to={`/billing/invoices/${invoice.id}`}
+            aria-label={`Open invoice ${invoice.number}`}
+            className="inline-flex min-h-[44px] items-center rounded-card border border-rule px-3 text-sm hover:bg-ink/5 lg:min-h-[30px]"
+          >
+            Open
+          </Link>
+          <Button size="sm" variant="ghost" onClick={() => setOpenId(invoice.id)} aria-label={`View ${invoice.number}`}>
+            Details
           </Button>
           {isUnpaid(invoice) && (
             <Button size="sm" variant="primary" onClick={payNow} aria-label={`Pay now, ${invoice.number}`}>
@@ -102,6 +117,7 @@ export default function BillingPage() {
             <Summary label="Paid this year" value={totals.paidThisYear} />
           </dl>
 
+          <h2 className="text-[1.15rem]">Invoices</h2>
           <Table
             caption="Invoices"
             columns={columns}
@@ -144,10 +160,20 @@ function InvoiceDrawer({ id, onClose, onPay }: { id: string | undefined; onClose
       title={data ? `Invoice ${data.number}` : 'Invoice'}
       description={data ? `Issued ${formatDate(data.issue_date)} · Due ${formatDate(data.due_date)}` : undefined}
       footer={
-        data && isUnpaid(data) ? (
-          <Button variant="primary" onClick={onPay}>
-            Pay now
-          </Button>
+        data ? (
+          <>
+            <Link
+              to={`/billing/invoices/${data.id}`}
+              className="inline-flex min-h-[44px] items-center rounded-card border border-rule px-4 text-[1rem] hover:bg-ink/5 lg:min-h-[36px]"
+            >
+              View / download PDF
+            </Link>
+            {isUnpaid(data) && (
+              <Button variant="primary" onClick={onPay}>
+                Pay now
+              </Button>
+            )}
+          </>
         ) : undefined
       }
     >
@@ -184,19 +210,24 @@ function InvoiceDrawer({ id, onClose, onPay }: { id: string | undefined; onClose
                     {item.sac_code && <span className="block text-sm text-ink-muted">SAC {item.sac_code}</span>}
                   </td>
                   <td className="px-2 py-2 text-right font-mono">{item.quantity}</td>
-                  <td className="py-2 pl-2 text-right font-mono">{formatINR(item.amount_minor)}</td>
+                  <td className="py-2 pl-2 text-right font-mono">{formatMoney(item.amount_minor, data.currency)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <dl className="ml-auto flex w-full max-w-xs flex-col gap-1.5">
-            <Line label="Subtotal" value={data.subtotal_minor} />
-            <Line label="CGST 9%" value={data.cgst_minor} />
-            <Line label="SGST 9%" value={data.sgst_minor} />
-            {data.igst_minor > 0 && <Line label="IGST" value={data.igst_minor} />}
-            <Line label="Total" value={data.total_minor} strong />
-            {data.amount_paid_minor > 0 && <Line label="Paid" value={data.amount_paid_minor} />}
-            {isUnpaid(data) && <Line label="Balance due" value={owed(data)} strong />}
+            <Line label="Subtotal" value={formatMoney(data.subtotal_minor, data.currency)} />
+            {data.discount_minor > 0 && <Line label="Discount" value={formatMoney(data.discount_minor, data.currency)} />}
+            {data.tax_mode === 'cgst_sgst' && (
+              <>
+                <Line label={`CGST ${formatRate(data.gst_rate / 2)}%`} value={formatMoney(data.cgst_minor, data.currency)} />
+                <Line label={`SGST ${formatRate(data.gst_rate / 2)}%`} value={formatMoney(data.sgst_minor, data.currency)} />
+              </>
+            )}
+            {data.tax_mode === 'igst' && <Line label={`IGST ${formatRate(data.gst_rate)}%`} value={formatMoney(data.igst_minor, data.currency)} />}
+            <Line label="Total" value={formatMoney(data.total_minor, data.currency)} strong />
+            {data.amount_paid_minor > 0 && <Line label="Paid" value={formatMoney(data.amount_paid_minor, data.currency)} />}
+            {isUnpaid(data) && <Line label="Balance due" value={formatMoney(owed(data), data.currency)} strong />}
           </dl>
         </div>
       ) : null}
@@ -204,11 +235,11 @@ function InvoiceDrawer({ id, onClose, onPay }: { id: string | undefined; onClose
   )
 }
 
-function Line({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+function Line({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={`flex justify-between gap-4 ${strong ? 'border-t border-rule pt-1.5 font-medium' : ''}`}>
       <dt className={strong ? '' : 'text-ink-muted'}>{label}</dt>
-      <dd className="font-mono">{formatINR(value)}</dd>
+      <dd className="font-mono">{value}</dd>
     </div>
   )
 }

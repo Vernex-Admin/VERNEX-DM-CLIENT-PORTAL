@@ -1,10 +1,18 @@
 import type { InvoiceItemInsert, Minor } from '../types/db'
+import type { TaxMode } from '../types/invoiceDocument'
 
-// Vernex and its clients are in the same state, so GST is CGST 9% + SGST 9% and IGST is 0.
-const HALF_GST_RATE = 0.09
+// The quick invoice form (client page, Invoices tab) bills CGST 9% + SGST 9%: Vernex and those
+// clients are in the same state. The Invoice Generator does not use this: its tax is chosen per
+// invoice (src/lib/invoiceMath.ts).
+const QUICK_FORM_GST_RATE = 18
+const HALF_GST_RATE = QUICK_FORM_GST_RATE / 200
 
 export type InvoiceTotals = {
   subtotal_minor: Minor
+  discount_minor: Minor
+  taxable_minor: Minor
+  tax_mode: TaxMode
+  gst_rate: number
   cgst_minor: Minor
   sgst_minor: Minor
   igst_minor: Minor
@@ -18,7 +26,17 @@ export function itemAmount(item: InvoiceItemInsert): Minor {
 export function invoiceTotals(items: InvoiceItemInsert[]): InvoiceTotals {
   const subtotal = items.reduce((sum, item) => sum + itemAmount(item), 0)
   const tax = Math.round(subtotal * HALF_GST_RATE)
-  return { subtotal_minor: subtotal, cgst_minor: tax, sgst_minor: tax, igst_minor: 0, total_minor: subtotal + tax * 2 }
+  return {
+    subtotal_minor: subtotal,
+    discount_minor: 0,
+    taxable_minor: subtotal,
+    tax_mode: 'cgst_sgst',
+    gst_rate: QUICK_FORM_GST_RATE,
+    cgst_minor: tax,
+    sgst_minor: tax,
+    igst_minor: 0,
+    total_minor: subtotal + tax * 2,
+  }
 }
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2, minimumFractionDigits: 0 })

@@ -10,6 +10,7 @@ type InvoiceRow = {
   client_id: string
   number: string
   paid_at: string | null
+  issued_at: string | null
   created_at: string
 }
 type CommentRow = {
@@ -54,7 +55,7 @@ export const activity: ActivityRepo = {
           .limit(limit),
       ),
       rows<InvoiceRow>(
-        from('invoices', 'id, client_id, number, paid_at, created_at')
+        from('invoices', 'id, client_id, number, paid_at, issued_at, created_at')
           .neq('status', 'draft')
           .order('created_at', { ascending: false })
           .limit(limit),
@@ -129,7 +130,7 @@ export const activity: ActivityRepo = {
         client_id: i.client_id,
         kind: 'invoice',
         text: i.paid_at ? `Payment received for invoice ${i.number}` : `Invoice ${i.number} sent`,
-        at: i.paid_at ?? i.created_at,
+        at: i.paid_at ?? i.issued_at ?? i.created_at,
         deliverable_id: null,
       })),
       ...comments.map<ActivityEvent>((c) => ({
