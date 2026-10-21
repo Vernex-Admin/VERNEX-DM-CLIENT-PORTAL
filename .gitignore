@@ -8,3 +8,7 @@ dist
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Supabase CLI local state and scratch files
+supabase/.temp
+tmp

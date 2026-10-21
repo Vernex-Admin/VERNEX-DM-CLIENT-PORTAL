@@ -8,7 +8,9 @@ import { QueryError } from '../../../components/QueryError'
 import { Button, EmptyState, Field, Input, Pill, Select, Skeleton, Table, useToast } from '../../../components/ui'
 import type { Column } from '../../../components/ui'
 import { formatDate, istDay } from '../../../lib/dates'
-import { INVOICE_STATUS } from '../../../lib/labels'
+import { isGeneratorInvoice, isLockedInvoice } from '../../../lib/invoices'
+import { formatMoney } from '../../../lib/invoiceMath'
+import { INVOICE_LIFECYCLE, INVOICE_STATUS } from '../../../lib/labels'
 import { formatINR, invoiceTotals, toMinor, toRupeesInput } from '../../../lib/money'
 import { useCan } from '../../../lib/permissions'
 import {
@@ -38,13 +40,11 @@ export function InvoicesTab({ clientId }: { clientId: string }) {
     { key: 'project', header: 'Project', cell: (row) => (row.project_id ? (names[row.project_id] ?? '') : '') },
     { key: 'issued', header: 'Issued', cell: (row) => formatDate(row.issue_date) },
     { key: 'due', header: 'Due', cell: (row) => formatDate(row.due_date) },
-    { key: 'total', header: 'Total', align: 'right', mono: true, cell: (row) => formatINR(row.total_minor) },
+    { key: 'total', header: 'Total', align: 'right', mono: true, cell: (row) => formatMoney(row.total_minor, row.currency) },
     {
       key: 'status',
       header: 'Status',
-      cell: (row) => (
-        <Pill tone={INVOICE_STATUS[row.status].tone}>{row.status === 'sent' || row.status === 'viewed' ? 'Sent' : INVOICE_STATUS[row.status].label}</Pill>
-      ),
+      cell: (row) => <Pill tone={INVOICE_LIFECYCLE[row.status].tone}>{INVOICE_LIFECYCLE[row.status].label}</Pill>,
     },
     { key: 'actions', header: 'Actions', cell: (row) => <RowActions invoice={row} onEdit={() => setDrawer(row)} onDelete={() => setDeleting(row)} /> },
   ]
@@ -56,11 +56,11 @@ export function InvoicesTab({ clientId }: { clientId: string }) {
         {canCreate && (
           <div className="flex items-center gap-2">
             <Link
-              to={`/admin/clients/${clientId}/invoice`}
+              to={`/admin/invoices/new?client=${clientId}`}
               className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule px-3 text-sm font-medium hover:bg-ink/5"
             >
               <Icon icon={Receipt} size={15} />
-              Full Invoice Generator
+              Invoice Generator
             </Link>
             <Button variant="primary" onClick={() => setDrawer('new')}>
               <Icon icon={Plus} size={16} />
@@ -111,6 +111,25 @@ export function InvoicesTab({ clientId }: { clientId: string }) {
 function RowActions({ invoice, onEdit, onDelete }: { invoice: Invoice; onEdit: () => void; onDelete: () => void }) {
   const canEdit = useCan('invoice', 'edit', { clientId: invoice.client_id })
   const canDelete = useCan('invoice', 'delete', { clientId: invoice.client_id })
+  if (isGeneratorInvoice(invoice)) {
+    // Generator invoices are edited (or revised) in the generator; issued ones are never deleted.
+    return (
+      <span className="inline-flex gap-1">
+        <Link
+          to={`/admin/invoices/${invoice.id}`}
+          aria-label={`Open ${invoice.number}`}
+          className="inline-flex min-h-[44px] items-center rounded-card px-3 text-sm hover:bg-ink/5 lg:min-h-[30px]"
+        >
+          Open
+        </Link>
+        {canDelete && !isLockedInvoice(invoice) && (
+          <Button size="sm" variant="ghost" aria-label={`Delete ${invoice.number}`} onClick={onDelete}>
+            Delete
+          </Button>
+        )}
+      </span>
+    )
+  }
   return (
     <span className="inline-flex gap-1">
       {canEdit && (
@@ -226,7 +245,7 @@ function InvoiceDrawer({ clientId, invoice, onClose }: { clientId: string; invoi
       open
       onClose={onClose}
       title={invoice ? `Edit ${invoice.number}` : 'New invoice'}
-      description="GST is added at 9% CGST and 9% SGST."
+      description="Quick form: GST is added at 9% CGST and 9% SGST. Use the Invoice Generator for other rates, currencies or no GST."
       dirty={dirty}
       onSubmit={submit}
       submitLabel={invoice ? 'Save changes' : 'Create invoice'}

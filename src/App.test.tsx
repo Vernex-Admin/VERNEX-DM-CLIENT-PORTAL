@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, configure, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, configure, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import App from './App'
@@ -37,15 +37,15 @@ describe('route guards', () => {
   it('sends a signed-out client to /login', async () => {
     await signInAs(null)
     renderAt('/billing')
-    expect(await screen.findByRole('button', { name: 'Send me a sign-in link' })).toBeTruthy()
-    expect(screen.queryByText('Vernex team', { selector: 'span' })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeTruthy()
+    expect(screen.getByLabelText(/Client Code/)).toBeTruthy()
   })
 
-  it('sends signed-out staff to /admin/login, labelled Vernex team', async () => {
+  it('sends signed-out staff to the same shared login', async () => {
     await signInAs(null)
     renderAt('/admin/clients')
-    expect(await screen.findByRole('button', { name: 'Send me a sign-in link' })).toBeTruthy()
-    expect(screen.getAllByText('Vernex team').length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeTruthy()
+    expect(screen.getByLabelText(/Client Code/)).toBeTruthy()
   })
 
   it('keeps a client out of /admin/*', async () => {
@@ -59,6 +59,7 @@ describe('route guards', () => {
     renderAt('/login')
     expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy()
   })
+
 
   it('shows the access page to a PM on the Founder Inbox, and the page to the founder', async () => {
     await signInAs(SEED_IDS.pm)
@@ -77,22 +78,11 @@ describe('route guards', () => {
   })
 })
 
-describe('sign-in flow', () => {
-  it('returns to the page asked for once the emailed link is opened', async () => {
+describe('shared sign-in route', () => {
+  it('redirects the old admin login URL to the shared Client Code form', async () => {
     await signInAs(null)
-    renderAt('/billing')
-    fireEvent.change(await screen.findByLabelText(/Email/), { target: { value: 'divya@agkfitness.example' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
-    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Open the link/ }))
-    expect(await screen.findByRole('heading', { name: 'Billing' })).toBeTruthy()
-  })
-
-  it('does not reveal whether an email has an account', async () => {
-    await signInAs(null)
-    renderAt('/login')
-    fireEvent.change(await screen.findByLabelText(/Email/), { target: { value: 'stranger@example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send me a sign-in link' }))
-    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeTruthy()
+    renderAt('/admin/login')
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Google|sign-in link/i })).toBeNull()
   })
 })

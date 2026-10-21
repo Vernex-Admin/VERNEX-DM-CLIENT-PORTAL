@@ -66,6 +66,19 @@ export function useSignInWithPassword() {
   })
 }
 
+/** Email or Client Code sign-in resolves the account inside Supabase before checking the password. */
+export function useSignInWithIdentifier() {
+  const queryClient = useQueryClient()
+  const refresh = useRefreshSession()
+  return useMutation({
+    mutationFn: (input: { identifier: string; password: string }) => data.auth.signInWithIdentifier(input),
+    onSuccess: async () => {
+      await refresh()
+      await queryClient.invalidateQueries({ queryKey: currentProfileKey })
+    },
+  })
+}
+
 /** Sends the sign-in link. Signing in happens when the link is opened. */
 export function useSignInWithOtp() {
   return useMutation({ mutationFn: (input: { email: string }) => data.auth.signInWithOtp(input) })

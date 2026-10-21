@@ -338,7 +338,7 @@ describe('billing', () => {
     renderAt('/billing')
     const [pay] = await screen.findAllByRole('button', { name: /^Pay now, / })
     fireEvent.click(pay as HTMLElement)
-    expect(await screen.findByText('Online payment is coming soon')).toBeTruthy()
+    expect(await screen.findByText('Online payment is not available yet')).toBeTruthy()
   })
 })
 

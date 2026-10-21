@@ -16,6 +16,10 @@ export const R = {
   revisions: 'revisions',
   serviceRequests: 'service_requests',
   invoices: 'invoices',
+  invoiceEvents: 'invoice_events',
+  invoiceSettings: 'invoice_settings',
+  invoiceTemplates: 'invoice_templates',
+  invoiceImages: 'invoice_images',
   actionItems: 'action_items',
   comments: 'comments',
   files: 'files',
@@ -28,6 +32,7 @@ export const R = {
   onboarding: 'onboarding',
   onboardingGates: 'onboarding_gates',
   documents: 'documents',
+  agreements: 'agreements',
   templates: 'templates',
 } as const
 

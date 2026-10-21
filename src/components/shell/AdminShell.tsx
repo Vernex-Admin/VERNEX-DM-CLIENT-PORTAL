@@ -1,11 +1,10 @@
-import { FileCheck, FileText, Inbox, Receipt, Send, Sparkles, SquareKanban, UserCog, Users } from 'lucide-react'
+import { FileCheck, FileText, Receipt, SquareKanban, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useSearchParams } from 'react-router'
 import { cn } from '../../lib/cn'
 import { useCan } from '../../lib/permissions'
 import { useClients } from '../../lib/queries'
 import { Icon } from '../Icon'
-import { Wordmark } from '../Wordmark'
 import { Pill, Select } from '../ui'
 import { UserMenu } from './UserMenu'
 
@@ -13,9 +12,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; show: boolean }
 
 export function AdminShell() {
   const canSeeLeads = useCan('lead', 'view')
-  const canSeeInbox = useCan('founder_inbox', 'view')
   const canSeeTemplates = useCan('template', 'view')
-  const canSeeStaff = useCan('staff', 'view')
   const { data: clients = [] } = useClients()
   const [params, setParams] = useSearchParams()
 
@@ -23,12 +20,8 @@ export function AdminShell() {
     { to: '/admin/clients', label: 'Clients', icon: Users, show: true },
     { to: '/admin/pipeline', label: 'Pipeline', icon: SquareKanban, show: canSeeLeads },
     { to: '/admin/agreement', label: 'Agreement', icon: FileCheck, show: true },
-    { to: '/admin/invoice', label: 'Invoice', icon: Receipt, show: true },
+    { to: '/admin/invoices', label: 'Invoices', icon: Receipt, show: true },
     { to: '/admin/templates', label: 'Templates', icon: FileText, show: canSeeTemplates },
-    { to: '/admin/staff', label: 'Staff', icon: UserCog, show: canSeeStaff },
-    { to: '/admin/outbox', label: 'Outbox', icon: Send, show: true },
-    { to: '/admin/founder-inbox', label: 'Founder Inbox', icon: Inbox, show: canSeeInbox },
-    { to: '/admin/ai-drafts', label: 'AI Drafts', icon: Sparkles, show: true },
   ].filter((item) => item.show)
 
   function pickClient(id: string) {
@@ -39,10 +32,14 @@ export function AdminShell() {
   }
 
   return (
-    <div className="min-h-dvh bg-paper text-[1rem] text-ink lg:text-[13px]">
-      <header className="sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-rule bg-surface px-3">
+    <div className="admin-shell min-h-dvh bg-paper text-[1rem] text-ink lg:text-[13px]">
+      <header className="admin-shell-header sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-rule bg-surface px-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Wordmark className="text-[1.15rem]" />
+          <img
+            src="/vernex-digital-marketing.png"
+            alt="Vernex Digital Marketing"
+            className="h-12 w-36 object-cover object-center"
+          />
           <Pill tone="neutral">Vernex team</Pill>
         </div>
         <div className="flex items-center gap-2">
@@ -68,7 +65,7 @@ export function AdminShell() {
 
       <nav
         aria-label="Main"
-        className="fixed top-12 bottom-0 left-0 hidden w-48 flex-col gap-0.5 border-r border-rule bg-surface p-2 md:flex"
+        className="admin-shell-sidebar fixed top-12 bottom-0 left-0 hidden w-48 flex-col gap-0.5 border-r border-rule bg-surface p-2 md:flex"
       >
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} className={linkClass}>
@@ -78,7 +75,7 @@ export function AdminShell() {
         ))}
       </nav>
 
-      <nav aria-label="Main" className="flex gap-1 overflow-x-auto border-b border-rule bg-surface px-2 py-1 md:hidden">
+      <nav aria-label="Main" className="admin-shell-mobile-nav flex gap-1 overflow-x-auto border-b border-rule bg-surface px-2 py-1 md:hidden">
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} className={linkClass}>
             <Icon icon={item.icon} size={16} />
@@ -87,7 +84,7 @@ export function AdminShell() {
         ))}
       </nav>
 
-      <main className="p-4 md:ml-48">
+      <main className="admin-shell-main p-4 md:ml-48">
         <Outlet />
       </main>
     </div>

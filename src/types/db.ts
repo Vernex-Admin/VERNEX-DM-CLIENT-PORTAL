@@ -1,3 +1,6 @@
+import type { AgreementContent, AgreementEventType, AgreementStatus } from './agreement'
+import type { InvoiceCurrency, InvoiceDocument, InvoiceEvent, InvoiceSettings, InvoiceTemplate, TaxMode } from './invoiceDocument'
+
 // Row types for the MVP tables. Names and columns follow docs/PRD.md section 4 (snake_case, as
 // Postgres and the Supabase client return them), trimmed to what the MVP uses.
 // `profiles` replaces the PRD's `users`; `service_requests` replaces `change_requests`.
@@ -400,8 +403,14 @@ export type Invoice = {
   milestone_id: UUID | null
   number: string
   status: InvoiceStatus
-  currency: 'INR'
+  currency: InvoiceCurrency
   subtotal_minor: Minor
+  discount_minor: Minor
+  /** Subtotal less discount: what GST is charged on. */
+  taxable_minor: Minor
+  tax_mode: TaxMode
+  /** Percent. 0 when no GST applies. */
+  gst_rate: number
   cgst_minor: Minor
   sgst_minor: Minor
   igst_minor: Minor
@@ -410,6 +419,17 @@ export type Invoice = {
   issue_date: DateString
   due_date: DateString
   paid_at: Timestamp | null
+  /** The Invoice Generator's page. Null for invoices made with the quick form. */
+  document: InvoiceDocument | null
+  /** 1 for an original; a revision of an issued invoice counts up from there. */
+  revision: number
+  /** The issued invoice this one revises. */
+  revision_of: UUID | null
+  /** The revision that replaced this invoice once that revision was issued. */
+  superseded_by: UUID | null
+  /** Set when the generator issues it; from then on the content is locked. */
+  issued_at: Timestamp | null
+  updated_at: Timestamp
   created_at: Timestamp
 }
 
@@ -421,6 +441,9 @@ export type InvoiceItem = {
   quantity: number
   unit_price_minor: Minor
   amount_minor: Minor
+  /** Order on the page, from 1. */
+  position: number
+  bill_period: string
 }
 
 /** Feeds the "Action Required" banner. Open while `resolved_at` is null. */
@@ -590,6 +613,53 @@ export type ClientDocument = {
   created_at: Timestamp
 }
 
+export type AgreementTemplate = {
+  id: UUID
+  name: string
+  content: AgreementContent
+  is_active: boolean
+  created_by: UUID
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export type Agreement = {
+  id: UUID
+  client_id: UUID
+  template_id: UUID | null
+  title: string
+  content: AgreementContent
+  status: AgreementStatus
+  created_by: UUID
+  founder_user_id: UUID | null
+  founder_signature_path: string | null
+  founder_signed_at: Timestamp | null
+  sent_at: Timestamp | null
+  client_user_id: UUID | null
+  client_signature_path: string | null
+  client_signed_at: Timestamp | null
+  client_timezone: string | null
+  signed_content: AgreementContent | null
+  signed_pdf_path: string | null
+  cancelled_by: UUID | null
+  cancelled_at: Timestamp | null
+  created_at: Timestamp
+  updated_at: Timestamp
+  version: number
+  founder_signature_url?: string | null
+  client_signature_url?: string | null
+  signed_pdf_url?: string | null
+}
+
+export type AgreementEvent = {
+  id: UUID
+  agreement_id: UUID
+  actor_user_id: UUID
+  event_type: AgreementEventType
+  details: Record<string, unknown>
+  created_at: Timestamp
+}
+
 /** The 11 playbook messages. Body uses {{merge_fields}}. */
 export type MessageTemplate = {
   id: UUID
@@ -617,6 +687,9 @@ export type Tables = {
   service_requests: ServiceRequest
   invoices: Invoice
   invoice_items: InvoiceItem
+  invoice_events: InvoiceEvent
+  invoice_templates: InvoiceTemplate
+  invoice_settings: InvoiceSettings
   action_items: ActionItem
   feedback: Feedback
   social_metrics_daily: SocialMetricDaily
@@ -628,6 +701,9 @@ export type Tables = {
   onboarding_item_templates: OnboardingItemTemplate
   onboarding_items: OnboardingItem
   documents: ClientDocument
+  agreement_templates: AgreementTemplate
+  agreements: Agreement
+  agreement_events: AgreementEvent
   message_templates: MessageTemplate
 }
 
@@ -684,7 +760,7 @@ export type DeliverableInsert = Pick<Deliverable, 'project_id' | 'title' | 'kind
     >
   >
 export type InvoiceItemInsert = Pick<InvoiceItem, 'description' | 'unit_price_minor'> &
-  Partial<Pick<InvoiceItem, 'sac_code' | 'quantity'>>
+  Partial<Pick<InvoiceItem, 'sac_code' | 'quantity' | 'bill_period'>>
 export type InvoiceInsert = Pick<Invoice, 'client_id' | 'issue_date' | 'due_date'> &
   Partial<Pick<Invoice, 'project_id' | 'milestone_id' | 'status'>> & { items: InvoiceItemInsert[] }
 export type ActionItemInsert = Insert<

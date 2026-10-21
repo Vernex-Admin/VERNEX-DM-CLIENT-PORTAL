@@ -1,13 +1,24 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { NOT_INVITED_MESSAGE, isNotInvited, signInErrorMessage } from '../../lib/authMessages'
 import { DataError } from '../types'
-import { cleanPatch, toDataError } from './errors'
+import { NOT_SET_UP_MESSAGE, cleanPatch, toDataError } from './errors'
 
 describe('toDataError', () => {
   it('shows our own function errors (P0001) as they are', () => {
     const error = toDataError({ code: 'P0001', message: 'No revisions are left on this deliverable.' })
     expect(error).toBeInstanceOf(DataError)
     expect(error).toMatchObject({ code: 'invalid', message: 'No revisions are left on this deliverable.' })
+  })
+
+  it('reports a missing table, column or function as a database that needs updating, not a connection problem', () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const missingTable = toDataError({ code: 'PGRST205', message: "Could not find the table 'public.invoice_settings' in the schema cache" })
+    expect(missingTable).toMatchObject({ code: 'not_set_up', message: NOT_SET_UP_MESSAGE })
+    expect(missingTable.message).not.toContain('invoice_settings')
+    expect(toDataError({ code: '42703', message: 'column invoices.document does not exist' }).code).toBe('not_set_up')
+    expect(toDataError({ code: 'PGRST202', message: 'Could not find the function public.save_invoice_draft' }).code).toBe('not_set_up')
+    expect(quiet).toHaveBeenCalledWith(expect.stringContaining('supabase db push'))
+    quiet.mockRestore()
   })
 
   it('maps 42501 and row-level security to forbidden', () => {

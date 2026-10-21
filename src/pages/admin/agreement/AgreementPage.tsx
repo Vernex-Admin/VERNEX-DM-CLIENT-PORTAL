@@ -1,9 +1,20 @@
-import { useState, useRef, useMemo } from 'react'
-import { ArrowLeft, ArrowRight, FileText, Image as ImageIcon, Plus, Printer, Trash2, Upload } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, ArrowRight, Ban, FileText, Plus, Printer, Save, Send, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { PDFDocument } from 'pdf-lib'
 import { Icon } from '../../../components/Icon'
 import { Button, Card, CardBody, Field, Input, Select, useToast } from '../../../components/ui'
-import { useClient, useClients, useCreateDocument } from '../../../lib/queries'
+import { useSessionProfile } from '../../../lib/session-context'
+import {
+  useAgreementTemplates, useAgreements, useCancelAgreement, useClient, useClients,
+  useAgreementEvents, useCreateAgreementDraft, useFounderSignAndSend, useGenerateFinalAgreementPdf, useRequestFounderSignature,
+  useSaveAgreementTemplate, useUpdateAgreementDraft,
+} from '../../../lib/queries'
+import type { Agreement } from '../../../types/db'
+import type { AgreementContent } from '../../../types/agreement'
+import { formatClientSignedAt } from '../../../lib/agreementTime'
+import { appendClosingPage, CLOSING_PAGE_URL } from '../../../lib/agreementClosingPage'
+import { buildAgreementPdf } from '../../../lib/agreementPdf'
 
 export type Clause = {
   id: string
@@ -12,12 +23,38 @@ export type Clause = {
   body: string
 }
 
+const agreementStatusLabel = (status: string) => ({
+  draft: 'Draft',
+  awaiting_founder_signature: 'Awaiting Founder Signature',
+  awaiting_client_signature: 'Awaiting Client Signature',
+  signed: 'Signed',
+  cancelled: 'Cancelled',
+}[status] ?? status)
+
+const agreementEventLabel = (event: string) => ({
+  created: 'Draft created',
+  edited: 'Draft edited',
+  submitted_for_founder_signature: 'Submitted for founder signature',
+  founder_signed_and_sent: 'Founder signed and sent to client',
+  client_signed: 'Client signed',
+  cancelled: 'Agreement cancelled',
+  signed_pdf_generated: 'Final PDF generated',
+}[event] ?? event)
+
+function formatLocalTimestamp(value: string) {
+  return `${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' }).format(new Date(value))} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`
+}
+
+function Timestamp({ label, value }: { label: string; value: string | null }) {
+  return <span className="text-xs text-ink-muted">{label}: {value ? formatLocalTimestamp(value) : 'Not signed'}</span>
+}
+
 const DEFAULT_CLAUSES: Clause[] = [
   {
     id: 'c1',
     number: 1,
     title: 'Scope of Engagement',
-    body: 'The Developer is engaged for the development of the project titled “{{projectTitle}}”. The scope of work includes UI/UX design, frontend development, and backend tasks as assigned by the Company. The Developer shall perform all assigned tasks in accordance with the Company’s instructions, timelines, and quality standards.',
+    body: 'The Developer is engaged for the development of the project titled "{{projectTitle}}". The scope of work includes UI/UX design, frontend development, and backend tasks as assigned by the Company. The Developer shall perform all assigned tasks in accordance with the Company\'s instructions, timelines, and quality standards.',
   },
   {
     id: 'c2',
@@ -98,10 +135,19 @@ export default function AgreementPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const toast = useToast()
-  const createDocument = useCreateDocument()
-  const clients = useClients()
-
   const clientId = paramClientId ?? params.get('client') ?? ''
+  const profile = useSessionProfile()
+  const clients = useClients()
+  const templates = useAgreementTemplates()
+  const agreements = useAgreements(clientId || undefined)
+  const createDraft = useCreateAgreementDraft()
+  const updateDraft = useUpdateAgreementDraft()
+  const requestSignature = useRequestFounderSignature()
+  const founderSign = useFounderSignAndSend()
+  const cancelAgreement = useCancelAgreement()
+  const saveTemplate = useSaveAgreementTemplate()
+  const generatePdf = useGenerateFinalAgreementPdf()
+
   const clientQuery = useClient(clientId || undefined)
   const client = clientQuery.data
 
@@ -121,23 +167,53 @@ export default function AgreementPage() {
   const [companyTitle, setCompanyTitle] = useState('CEO & Founder')
   const [companyName, setCompanyName] = useState('VerneX')
   const [clauses, setClauses] = useState<Clause[]>(DEFAULT_CLAUSES)
-  const [devSignature, setDevSignature] = useState<string | null>(null)
+  const [clientName, setClientName] = useState('')
+  const [clientEmail, setClientEmail] = useState('')
+  const [services, setServices] = useState('')
+  const [scope, setScope] = useState('')
+  const [paymentTerms, setPaymentTerms] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [templateId, setTemplateId] = useState('')
+  const [templateName, setTemplateName] = useState('Vernex Services Agreement')
+  const [selectedAgreementId, setSelectedAgreementId] = useState('')
+  const [zoomMode, setZoomMode] = useState<'fit-page' | '75' | '100' | 'fit-width'>('fit-page')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(true)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewPageCount, setPreviewPageCount] = useState(1)
+  const [previewAtClosingPage, setPreviewAtClosingPage] = useState(false)
 
-  // Pagination threshold: clauses per page (first page has title/preamble, so fewer clauses)
-  const [page1ClauseCount, setPage1ClauseCount] = useState(4)
-  const [page2ClauseCount, setPage2ClauseCount] = useState(7)
+  const selectedAgreement = agreements.data?.find((row) => row.id === selectedAgreementId)
+  const agreementEvents = useAgreementEvents(selectedAgreementId || undefined)
+  const isFounder = profile?.role === 'vernex_founder'
+  const editable = !selectedAgreement || selectedAgreement.status === 'draft'
 
-  const signatureInputRef = useRef<HTMLInputElement>(null)
-
-  function handleSignatureUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setDevSignature(reader.result as string)
-      toast({ title: 'Signature uploaded successfully', tone: 'ok' })
+  function agreementContent(): AgreementContent {
+    return {
+      projectTitle, agreementDate, startDate, endDate, clientName, clientEmail, services, scope,
+      paymentTerms, developerName, companyName, companySigner, companyTitle,
+      clauses: structuredClone(clauses),
     }
-    reader.readAsDataURL(file)
+  }
+
+  function loadAgreement(agreement: Agreement) {
+    setSelectedAgreementId(agreement.id)
+    setTemplateId(agreement.template_id ?? '')
+    setProjectTitle(agreement.content.projectTitle)
+    setAgreementDate(agreement.content.agreementDate)
+    setStartDate(agreement.content.startDate)
+    setEndDate(agreement.content.endDate)
+    setClientName(agreement.content.clientName)
+    setClientEmail(agreement.content.clientEmail)
+    setServices(agreement.content.services)
+    setScope(agreement.content.scope)
+    setPaymentTerms(agreement.content.paymentTerms)
+    setDeveloperName(agreement.content.developerName)
+    setCompanyName(agreement.content.companyName)
+    setCompanySigner(agreement.content.companySigner)
+    setCompanyTitle(agreement.content.companyTitle)
+    setClauses(agreement.content.clauses)
   }
 
   function handleAddClause() {
@@ -160,42 +236,133 @@ export default function AgreementPage() {
     setClauses(next)
   }
 
-  // Automatic multi-page segmentation
-  const pages = useMemo(() => {
-    const page1 = clauses.slice(0, page1ClauseCount)
-    const page2 = clauses.slice(page1ClauseCount, page1ClauseCount + page2ClauseCount)
-    const page3 = clauses.slice(page1ClauseCount + page2ClauseCount)
+  const previewContentJson = JSON.stringify(agreementContent())
 
-    return [
-      { pageNumber: 1, isFirst: true, isLast: false, clauses: page1 },
-      ...(page2.length > 0 ? [{ pageNumber: 2, isFirst: false, isLast: page3.length === 0, clauses: page2 }] : []),
-      ...(page3.length > 0 ? [{ pageNumber: 3, isFirst: false, isLast: true, clauses: page3 }] : []),
-    ]
-  }, [clauses, page1ClauseCount, page2ClauseCount])
+  useEffect(() => {
+    let cancelled = false
+    let nextUrl: string | null = null
 
-  async function handleSaveAgreement() {
+    const createPreview = async () => {
+      try {
+        const content = JSON.parse(previewContentJson) as AgreementContent
+        const [logoResponse, closingResponse] = await Promise.all([
+          fetch('/vernex-digital-marketing.png'),
+          fetch(CLOSING_PAGE_URL),
+        ])
+        if (!closingResponse.ok) throw new Error('The fixed closing page template is unavailable.')
+        const logo = logoResponse.ok ? new Uint8Array(await logoResponse.arrayBuffer()) : undefined
+        const basePdf = buildAgreementPdf({
+          title: `${content.projectTitle || 'Services'} Agreement`,
+          signed_content: content,
+          founder_signed_at: selectedAgreement?.founder_signed_at ?? null,
+          client_signed_at: selectedAgreement?.client_signed_at ?? null,
+          founder_user_id: selectedAgreement?.founder_user_id ?? null,
+          client_user_id: selectedAgreement?.client_user_id ?? null,
+          founderName: content.companySigner,
+          clientName: content.clientName,
+          logo,
+        })
+        const agreementPages = await PDFDocument.load(basePdf)
+        const isSigned = selectedAgreement?.status === 'signed'
+        let signature: Uint8Array | undefined
+        if (isSigned && selectedAgreement?.client_signature_url) {
+          try {
+            const response = await fetch(selectedAgreement.client_signature_url)
+            if (response.ok) signature = new Uint8Array(await response.arrayBuffer())
+          } catch { /* Preview remains available if a private signature URL expires. */ }
+        }
+        const pdf = await appendClosingPage(basePdf, new Uint8Array(await closingResponse.arrayBuffer()), {
+          name: isSigned ? (selectedAgreement?.signed_content?.clientName || content.clientName || 'Client signer') : (content.clientName || 'Client signer'),
+          signature,
+          signedAt: isSigned ? selectedAgreement?.client_signed_at : null,
+          timeZone: isSigned ? selectedAgreement?.client_timezone : null,
+        })
+        const pdfBuffer = new ArrayBuffer(pdf.byteLength)
+        new Uint8Array(pdfBuffer).set(pdf)
+        nextUrl = URL.createObjectURL(new Blob([pdfBuffer], { type: 'application/pdf' }))
+        if (cancelled) { URL.revokeObjectURL(nextUrl); return }
+        setPreviewPageCount(agreementPages.getPageCount() + 1)
+        setPreviewUrl((oldUrl) => {
+          if (oldUrl) URL.revokeObjectURL(oldUrl)
+          return nextUrl
+        })
+      } catch (error) {
+        if (!cancelled) setPreviewError(error instanceof Error ? error.message : 'Could not prepare the A4 agreement preview.')
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      setPreviewLoading(true)
+      setPreviewError(null)
+      void createPreview()
+    }, 180)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      if (nextUrl) URL.revokeObjectURL(nextUrl)
+    }
+  }, [previewContentJson, selectedAgreement?.id, selectedAgreement?.status, selectedAgreement?.founder_signed_at,
+    selectedAgreement?.client_signed_at, selectedAgreement?.founder_user_id, selectedAgreement?.client_user_id,
+    selectedAgreement?.client_timezone, selectedAgreement?.client_signature_url, selectedAgreement?.signed_content])
+
+  async function handleSaveAgreement(): Promise<string | null> {
     if (!clientId) {
       toast({ title: 'Select a client first to link this agreement', tone: 'bad' })
-      return
+      return null
     }
     try {
-      await createDocument.mutateAsync({
-        client_id: clientId,
-        kind: 'agreement',
-        title: `${projectTitle} - Developer Agreement`,
-        external_url: null,
-        status: devSignature ? 'signed' : 'draft',
-        sent_at: new Date().toISOString(),
-        signed_at: devSignature ? new Date().toISOString() : null,
+      const title = `${projectTitle || 'Services'} Agreement`
+      const agreement = selectedAgreementId
+        ? await updateDraft.mutateAsync({ id: selectedAgreementId, title, content: agreementContent() }) as Agreement
+        : await createDraft.mutateAsync({ client_id: clientId, template_id: templateId || null, title, content: agreementContent() }) as Agreement
+      setSelectedAgreementId(agreement.id)
+      toast({ title: 'Draft saved', tone: 'ok' })
+      return agreement.id
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Could not save agreement draft', tone: 'bad' })
+      return null
+    }
+  }
+
+  async function handleRequestSignature() {
+    const id = await handleSaveAgreement()
+    if (!id) return
+    try {
+      await requestSignature.mutateAsync(id)
+      toast({ title: 'Sent to founder for review and signature', tone: 'ok' })
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Could not submit agreement', tone: 'bad' })
+    }
+  }
+
+  async function handleFounderSign() {
+    if (!selectedAgreementId) return
+    try {
+      const signature = await fetch('/vernex-founder-signature.jpg').then((response) => {
+        if (!response.ok) throw new Error('The embedded founder signature is unavailable.')
+        return response.blob()
       })
-      toast({ title: 'Agreement saved to client documents', tone: 'ok' })
-    } catch {
-      toast({ title: 'Could not save agreement document', tone: 'bad' })
+      await founderSign.mutateAsync({ id: selectedAgreementId, signature })
+      toast({ title: 'Founder approval recorded and agreement sent to the client', tone: 'ok' })
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Founder signature could not be saved', tone: 'bad' })
+    }
+  }
+
+  async function handleSaveTemplate() {
+    try {
+      const saved = await saveTemplate.mutateAsync({ name: templateName, content: agreementContent() })
+      setTemplateId(saved.id)
+      toast({ title: 'Agreement template saved', tone: 'ok' })
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Template could not be saved', tone: 'bad' })
     }
   }
 
   function handlePrint() {
-    window.print()
+    if (previewUrl) window.open(previewUrl, '_blank', 'noopener,noreferrer')
   }
 
   function handleProceedToInvoice() {
@@ -207,9 +374,9 @@ export default function AgreementPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="agreement-editor flex min-h-[calc(100vh-5rem)] flex-col gap-3">
       {/* Top action header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-4 no-print">
+      <div className="agreement-editor-toolbar sticky top-12 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-rule bg-paper/95 py-2 backdrop-blur no-print">
         <div className="flex items-center gap-3">
           <Link
             to={clientId ? `/admin/clients/${clientId}` : '/admin/clients'}
@@ -219,9 +386,9 @@ export default function AgreementPage() {
             Back
           </Link>
           <div>
-            <h1 className="text-[1.4rem] font-semibold leading-tight text-ink">Developer Agreement Generator</h1>
+            <h1 className="text-[1.4rem] font-semibold leading-tight text-ink">Digital Agreement</h1>
             <p className="text-xs text-ink-muted">
-              Live agreement matching the official VerneX agreement template with automatic multi-page break.
+              Draft, review, sign and send a client agreement.
             </p>
           </div>
         </div>
@@ -232,11 +399,24 @@ export default function AgreementPage() {
             Print / Save as PDF
           </Button>
 
-          {clientId && (
-            <Button onClick={handleSaveAgreement} loading={createDocument.isPending} className="gap-1.5">
-              <Icon icon={FileText} size={15} />
-              Save Agreement
+          {editable && clientId && (
+            <Button variant="secondary" onClick={handleSaveAgreement} loading={createDraft.isPending || updateDraft.isPending} className="gap-1.5">
+              <Icon icon={Save} size={15} />
+              Save Draft
             </Button>
+          )}
+
+          {editable && clientId && (
+            <Button onClick={handleRequestSignature} loading={requestSignature.isPending} className="gap-1.5">
+              <Icon icon={FileText} size={15} />
+              Submit for Founder Signature
+            </Button>
+          )}
+
+          {selectedAgreement?.status === 'signed' && selectedAgreement.signed_pdf_url && (
+            <a href={selectedAgreement.signed_pdf_url} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-card border border-rule px-3 text-sm font-medium text-ink">
+              <Icon icon={FileText} size={15} /> Download Signed PDF
+            </a>
           )}
 
           <Button variant="primary" onClick={handleProceedToInvoice} className="gap-1.5">
@@ -247,15 +427,42 @@ export default function AgreementPage() {
       </div>
 
       {/* Main split grid: Controls on left, Live Agreement Document on right */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="agreement-editor-layout grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-12">
         {/* Left Control Panel (col-span-5) */}
-        <div className="flex flex-col gap-5 lg:col-span-5 no-print">
+        <div className="agreement-editor-controls flex min-h-0 flex-col gap-3 lg:col-span-5 no-print">
           <Card>
             <CardBody className="flex flex-col gap-4 p-5">
               <h2 className="text-base font-semibold text-ink">Agreement Details</h2>
 
+              <Field label="Reusable Template">
+                <Select value={templateId} disabled={!editable} onChange={(event) => {
+                  const id = event.target.value
+                  setTemplateId(id)
+                  const template = templates.data?.find((item) => item.id === id)
+                  const content = template?.content
+                  if (!content) return
+                  setProjectTitle(content.projectTitle)
+                  setAgreementDate(content.agreementDate)
+                  setStartDate(content.startDate)
+                  setEndDate(content.endDate)
+                  setClientName(content.clientName)
+                  setClientEmail(content.clientEmail)
+                  setServices(content.services)
+                  setScope(content.scope)
+                  setPaymentTerms(content.paymentTerms)
+                  setDeveloperName(content.developerName)
+                  setCompanyName(content.companyName)
+                  setCompanySigner(content.companySigner)
+                  setCompanyTitle(content.companyTitle)
+                  setClauses(content.clauses.length ? content.clauses : DEFAULT_CLAUSES)
+                }}>
+                  <option value="">Start from current agreement</option>
+                  {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </Select>
+              </Field>
+
               {!clientId && (
-                <Field label="Select Client (Optional)">
+                <Field label="Client">
                   <Select
                     value={clientId}
                     onChange={(e) => {
@@ -275,6 +482,7 @@ export default function AgreementPage() {
               <Field label="Project Title">
                 <Input
                   value={projectTitle}
+                  disabled={!editable}
                   onChange={(e) => setProjectTitle(e.target.value)}
                   placeholder="e.g. VNX - SCHOOL ERP PROJECT"
                 />
@@ -284,90 +492,114 @@ export default function AgreementPage() {
                 <Field label="Agreement Date">
                   <Input
                     value={agreementDate}
+                    disabled={!editable}
                     onChange={(e) => setAgreementDate(e.target.value)}
                     placeholder="DD/MM/YYYY"
                   />
                 </Field>
 
-                <Field label="Developer Name">
+                <Field label="Client / signer name">
                   <Input
-                    value={developerName}
-                    onChange={(e) => setDeveloperName(e.target.value)}
-                    placeholder="e.g. Haran"
+                    value={clientName}
+                    disabled={!editable}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Client signing contact"
                   />
                 </Field>
               </div>
 
+              <Field label="Client email">
+                <Input value={clientEmail} disabled={!editable} type="email" onChange={(e) => setClientEmail(e.target.value)} />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Start date"><Input value={startDate} disabled={!editable} type="date" onChange={(e) => setStartDate(e.target.value)} /></Field>
+                <Field label="End date"><Input value={endDate} disabled={!editable} type="date" onChange={(e) => setEndDate(e.target.value)} /></Field>
+              </div>
+
+              <Field label="Services">
+                <textarea className="w-full rounded-control border border-rule bg-surface p-2 text-sm" rows={2} disabled={!editable} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Services included in this agreement" />
+              </Field>
+              <Field label="Scope of work">
+                <textarea className="w-full rounded-control border border-rule bg-surface p-2 text-sm" rows={3} disabled={!editable} value={scope} onChange={(e) => setScope(e.target.value)} placeholder="Deliverables, responsibilities and exclusions" />
+              </Field>
+              <Field label="Payment terms">
+                <textarea className="w-full rounded-control border border-rule bg-surface p-2 text-sm" rows={3} disabled={!editable} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} placeholder="Amount, currency, schedule, tax and late-payment terms" />
+              </Field>
+
               <div className="grid grid-cols-3 gap-2">
                 <Field label="Company Name">
-                  <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+                  <Input value={companyName} disabled={!editable} onChange={(e) => setCompanyName(e.target.value)} />
                 </Field>
                 <Field label="Signer Name">
-                  <Input value={companySigner} onChange={(e) => setCompanySigner(e.target.value)} />
+                  <Input value={companySigner} disabled={!editable} onChange={(e) => setCompanySigner(e.target.value)} />
                 </Field>
                 <Field label="Signer Title">
-                  <Input value={companyTitle} onChange={(e) => setCompanyTitle(e.target.value)} />
+                  <Input value={companyTitle} disabled={!editable} onChange={(e) => setCompanyTitle(e.target.value)} />
                 </Field>
               </div>
 
               <div className="rounded-card border border-rule bg-paper/50 p-3.5">
-                <span className="text-xs font-semibold text-ink">Developer Signature Upload</span>
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  Click the signature box in the preview or upload an image file here to fit the developer signature slot.
-                </p>
-                <div className="mt-2.5 flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={signatureInputRef}
-                    accept="image/*"
-                    onChange={handleSignatureUpload}
-                    className="hidden"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => signatureInputRef.current?.click()}
-                    className="gap-1.5"
-                  >
-                    <Icon icon={Upload} size={14} />
-                    {devSignature ? 'Change Signature' : 'Upload Signature'}
-                  </Button>
-                  {devSignature && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setDevSignature(null)}
-                      className="text-bad hover:bg-bad/10"
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
+                <Field label="Save reusable template as">
+                  <Input disabled={!editable} value={templateName} onChange={(event) => setTemplateName(event.target.value)} />
+                </Field>
+                <Button className="mt-3 gap-1.5" size="sm" variant="secondary" disabled={!editable || !templateName.trim()} loading={saveTemplate.isPending} onClick={handleSaveTemplate}>
+                  <Icon icon={Save} size={14} /> Save as Template
+                </Button>
               </div>
 
-              <div className="flex flex-col gap-1.5 pt-2">
-                <span className="text-xs font-semibold text-ink">Multi-page Split Controls</span>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Page 1 Clauses">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={page1ClauseCount}
-                      onChange={(e) => setPage1ClauseCount(Number(e.target.value) || 1)}
-                    />
-                  </Field>
-                  <Field label="Page 2 Clauses">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={12}
-                      value={page2ClauseCount}
-                      onChange={(e) => setPage2ClauseCount(Number(e.target.value) || 1)}
-                    />
-                  </Field>
+              {selectedAgreement && (
+                <div className="rounded-card border border-rule p-3.5">
+                  <p className="font-semibold text-ink">{selectedAgreement.title}</p>
+                  <p className="mt-1 text-sm text-ink-muted">Status: {agreementStatusLabel(selectedAgreement.status)}</p>
+                  {selectedAgreement.status === 'awaiting_founder_signature' && isFounder && (
+                    <div className="mt-3 flex flex-col gap-2">
+                      <p className="text-sm text-ink-muted">Review the complete agreement. The signed Vernex closing page is included; your authenticated approval will record your identity and approval time before sending.</p>
+                      <Button variant="primary" loading={founderSign.isPending} onClick={handleFounderSign} className="gap-2">
+                        <Icon icon={Send} size={15} /> Approve &amp; Send to Client
+                      </Button>
+                    </div>
+                  )}
+                  {selectedAgreement.status === 'signed' && (
+                    <div className="mt-3 flex flex-col gap-2 text-sm">
+                      <Timestamp label="Founder signed" value={selectedAgreement.founder_signed_at} />
+                      <span className="text-xs text-ink-muted">Client signed at: {formatClientSignedAt(selectedAgreement.client_signed_at, selectedAgreement.client_timezone)}</span>
+                      {!selectedAgreement.signed_pdf_url && (
+                        <Button size="sm" variant="secondary" loading={generatePdf.isPending} onClick={() => generatePdf.mutateAsync(selectedAgreement.id).then((url) => { window.open(url, '_blank', 'noopener,noreferrer') }).catch((error: unknown) => toast({ title: error instanceof Error ? error.message : 'Could not generate PDF', tone: 'bad' }))}>
+                          Generate final signed PDF
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {['draft', 'awaiting_founder_signature', 'awaiting_client_signature'].includes(selectedAgreement.status) && (
+                    <Button size="sm" variant="ghost" className="mt-3 gap-1.5 text-bad" loading={cancelAgreement.isPending} onClick={() => cancelAgreement.mutateAsync(selectedAgreement.id).then(() => toast({ title: 'Agreement cancelled', tone: 'ok' })).catch((error: unknown) => toast({ title: error instanceof Error ? error.message : 'Could not cancel agreement', tone: 'bad' }))}>
+                      <Icon icon={Ban} size={14} /> Cancel Agreement
+                    </Button>
+                  )}
+                  <div className="mt-4 border-t border-rule pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">History</p>
+                    <ol className="flex flex-col gap-2 text-xs text-ink-muted">
+                      {(agreementEvents.data ?? []).map((event) => (
+                        <li key={event.id}>{agreementEventLabel(event.event_type)} &middot; {event.event_type === 'client_signed'
+                          ? formatClientSignedAt(event.created_at, selectedAgreement?.client_timezone ?? null)
+                          : formatLocalTimestamp(event.created_at)}</li>
+                      ))}
+                    </ol>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {agreements.data && agreements.data.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-ink">Agreement History</h3>
+                  {agreements.data.map((agreement) => (
+                    <button key={agreement.id} type="button" onClick={() => loadAgreement(agreement)} className={`rounded-card border px-3 py-2 text-left text-sm ${agreement.id === selectedAgreementId ? 'border-signal bg-surface' : 'border-rule bg-paper'}`}>
+                      <span className="block truncate font-medium">{agreement.title}</span>
+                      <span className="text-xs text-ink-muted">{agreementStatusLabel(agreement.status)} &middot; {formatLocalTimestamp(agreement.updated_at)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </CardBody>
           </Card>
 
@@ -391,6 +623,7 @@ export default function AgreementPage() {
                       </span>
                       <button
                         type="button"
+                        disabled={!editable}
                         onClick={() => handleDeleteClause(index)}
                         className="text-ink-muted hover:text-bad"
                         title="Delete clause"
@@ -401,6 +634,7 @@ export default function AgreementPage() {
                     <Input
                       className="mb-1.5 text-xs font-medium"
                       value={clause.title}
+                      disabled={!editable}
                       onChange={(e) => handleUpdateClause(index, { title: e.target.value })}
                       placeholder="Clause Title"
                     />
@@ -408,6 +642,7 @@ export default function AgreementPage() {
                       rows={3}
                       className="w-full rounded-control border border-rule bg-surface p-2 text-xs leading-relaxed text-ink focus:border-signal focus:outline-none"
                       value={clause.body}
+                      disabled={!editable}
                       onChange={(e) => handleUpdateClause(index, { body: e.target.value })}
                     />
                   </div>
@@ -417,184 +652,34 @@ export default function AgreementPage() {
           </Card>
         </div>
 
-        {/* Right Live Document Preview (col-span-7) */}
-        <div className="flex flex-col items-center gap-8 lg:col-span-7">
-          {pages.map((pg, pageIdx) => {
-            const isLastPage = pageIdx === pages.length - 1
-
-            return (
-              <div
-                key={pg.pageNumber}
-                className="relative flex min-h-[1120px] w-full max-w-[780px] flex-col justify-between rounded-lg border border-rule bg-white p-10 text-neutral-900 shadow-md print:m-0 print:min-h-screen print:max-w-none print:rounded-none print:border-none print:p-8 print:shadow-none print:break-after-page"
-                style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
-              >
-                {/* Header Section from AGREEMENT_TEMPLATE.pdf */}
-                <div>
-                  <div className="flex items-center justify-between pb-3">
-                    {/* Left Brand */}
-                    <div className="flex items-center gap-3">
-                      <img
-                        src="/vernex-logo.jpg"
-                        alt="Vernex Logo"
-                        className="h-12 w-auto object-contain"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-serif text-[1.4rem] font-bold tracking-wider text-[#1e293b]">
-                          {companyName.toUpperCase()}
-                        </span>
-                        <span className="text-[11px] italic text-[#64748b]">
-                          Crafting your digital narrative.
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Right Contact Info */}
-                    <div className="text-right text-[11px] leading-tight text-[#334155]">
-                      <div className="font-semibold text-[#0f172a]">Vernex Digital Marketing</div>
-                      <div>+91 9789912805</div>
-                      <div className="text-[#0284c7]">http://www.vernex.in/</div>
-                    </div>
-                  </div>
-
-                  {/* Horizontal solid black bar from template */}
-                  <div className="h-2 w-full bg-black mb-6" />
-
-                  {/* Top Right Date */}
-                  <div className="mb-4 text-right font-sans text-xs font-semibold text-neutral-800">
-                    Date : <span className="font-bold">{agreementDate}</span>
-                  </div>
-
-                  {/* First Page Title & Preamble */}
-                  {pg.isFirst && (
-                    <div className="mb-6 flex flex-col items-center gap-2 text-center">
-                      <h2 className="text-sm font-bold uppercase tracking-wide underline underline-offset-4 text-neutral-950 sm:text-base">
-                        DEVELOPER ENGAGEMENT &amp; NON-OWNERSHIP AGREEMENT
-                      </h2>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
-                        {projectTitle}
-                      </h3>
-
-                      <div className="my-3 text-left font-sans text-[12.5px] leading-relaxed text-neutral-800">
-                        <p className="italic">
-                          &ldquo;This Agreement is made on this{' '}
-                          <span className="font-semibold underline">{agreementDate}</span>, at Chennai, India, by and between:
-                        </p>
-                        <p className="mt-1 pl-4">
-                          <span className="font-bold underline">{companyName}</span>, represented by{' '}
-                          <span className="font-bold underline">Mr. {companySigner}, {companyTitle}</span>, hereinafter referred to as the{' '}
-                          <span className="font-bold italic">&ldquo;Company&rdquo;</span> (which includes its successors and assigns),
-                        </p>
-                        <p className="mt-1 text-center font-bold">AND</p>
-                        <p className="mt-1 pl-4">
-                          <span className="font-bold underline">Mr. {developerName}</span>, hereinafter referred to as the{' '}
-                          <span className="font-bold italic">&ldquo;Developer&rdquo;</span> (which expression shall include his heirs, legal representatives, and permitted assigns).&rdquo;
-                        </p>
-                      </div>
-
-                      <div className="my-2 w-full border-t border-neutral-300 pt-2 text-center">
-                        <span className="font-sans text-xs font-bold uppercase tracking-widest underline underline-offset-4 text-neutral-950">
-                          TERMS &amp; CONDITIONS
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Clauses for this page */}
-                  <div className="flex flex-col gap-4 font-sans text-[12.5px] leading-relaxed text-neutral-800">
-                    {pg.clauses.map((clause) => {
-                      const renderedBody = clause.body
-                        .replace(/{{projectTitle}}/g, projectTitle)
-                        .replace(/{{developerName}}/g, developerName)
-                        .replace(/{{companyName}}/g, companyName)
-                        .replace(/{{companySigner}}/g, companySigner)
-
-                      return (
-                        <div key={clause.id} className="flex flex-col gap-0.5">
-                          <div className="font-bold text-neutral-950">
-                            {clause.number}, {clause.title}:
-                          </div>
-                          <p className="text-justify text-neutral-800 whitespace-pre-line">{renderedBody}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Footer Section */}
-                <div className="mt-8 flex flex-col gap-6">
-                  {/* Last Page Signatures block */}
-                  {isLastPage && (
-                    <div className="flex flex-col gap-6 pt-4">
-                      {/* Witness statement */}
-                      <p className="text-center font-sans text-xs italic leading-relaxed text-neutral-700">
-                        &ldquo;IN WITNESS WHEREOF, the parties hereto have carefully read, fully understood, and mutually agreed to the terms of this Agreement, and have executed the same by affixing their signatures as evidence of their free and informed consent.&rdquo;
-                      </p>
-
-                      {/* Side by side signature boxes */}
-                      <div className="grid grid-cols-2 gap-8 font-sans text-xs text-neutral-900">
-                        {/* Company Signature */}
-                        <div className="flex flex-col items-start gap-1">
-                          <div className="font-semibold text-neutral-950">Signed,</div>
-                          <div className="text-neutral-700">{companyTitle}, {companyName}:</div>
-
-                          {/* Authentic Boss Anandaa Signature image */}
-                          <div className="relative my-1 flex h-16 w-36 items-center justify-center overflow-hidden rounded border border-neutral-200 bg-neutral-50/50">
-                            <img
-                              src="/boss-signature.jpg"
-                              alt="Boss Anandaa Signature"
-                              className="h-28 w-28 -rotate-90 object-contain drop-shadow-sm"
-                            />
-                          </div>
-
-                          <div className="font-bold text-neutral-950">{companySigner}</div>
-                          <div className="text-neutral-600">({agreementDate})</div>
-                        </div>
-
-                        {/* Developer Signature Slot */}
-                        <div className="flex flex-col items-start gap-1">
-                          <div className="font-semibold text-neutral-950">Signed,</div>
-                          <div className="text-neutral-700">Developer:</div>
-
-                          {/* Interactive Clickable Signature Box */}
-                          <div
-                            onClick={() => signatureInputRef.current?.click()}
-                            title="Click to upload developer signature image"
-                            className="group relative my-1 flex h-16 w-44 cursor-pointer items-center justify-center overflow-hidden rounded border-2 border-dashed border-neutral-300 bg-neutral-50/70 transition-colors hover:border-signal hover:bg-neutral-100"
-                          >
-                            {devSignature ? (
-                              <img
-                                src={devSignature}
-                                alt="Developer Signature"
-                                className="h-full w-full object-contain p-1"
-                              />
-                            ) : (
-                              <div className="flex flex-col items-center gap-0.5 p-1 text-center text-[10px] text-neutral-500 group-hover:text-signal">
-                                <Icon icon={ImageIcon} size={16} />
-                                <span>Click to upload signature</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="font-bold text-neutral-950">{developerName}</div>
-                          <div className="text-neutral-600">({agreementDate})</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bottom Bar & Page Number from AGREEMENT_TEMPLATE.pdf */}
-                  <div className="relative flex items-center justify-center pt-4">
-                    <span className="font-sans text-xs font-semibold text-neutral-700">
-                      {pg.pageNumber}
-                    </span>
-                    {/* Bottom right curved decorative black shape from AGREEMENT_TEMPLATE */}
-                    <div className="absolute -bottom-10 -right-10 h-10 w-24 rounded-tl-[36px] bg-black print:hidden" />
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <section className="agreement-preview lg:col-span-7" aria-label="Agreement preview">
+          <div className="agreement-zoom-toolbar no-print">
+            <span className="text-xs font-medium text-ink-muted">Preview zoom</span>
+            <button type="button" aria-pressed={previewAtClosingPage} disabled={!previewUrl}
+              onClick={() => setPreviewAtClosingPage((current) => !current)}
+              className={previewAtClosingPage ? 'agreement-zoom-button active' : 'agreement-zoom-button'}>
+              {previewAtClosingPage ? 'Back to agreement' : `View final template · page ${previewPageCount}`}
+            </button>
+            {([
+              ['fit-page', 'Fit Page'], ['75', '75%'], ['100', '100%'], ['fit-width', 'Fit Width'],
+            ] as const).map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={zoomMode === value}
+                onClick={() => setZoomMode(value)} className={zoomMode === value ? 'agreement-zoom-button active' : 'agreement-zoom-button'}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="agreement-preview-viewport">
+            {previewLoading && <div className="agreement-preview-message">Preparing A4 preview…</div>}
+            {previewError && <div role="alert" className="agreement-preview-message error">{previewError}</div>}
+            {previewUrl && <iframe
+              key={`${previewUrl}-${zoomMode}`}
+              title="Paginated A4 agreement preview"
+              className="agreement-preview-pdf-frame"
+              src={`${previewUrl}#toolbar=0&navpanes=0&page=${previewAtClosingPage ? previewPageCount : 1}&zoom=${zoomMode === 'fit-page' ? 'page-fit' : zoomMode === 'fit-width' ? 'page-width' : zoomMode}`}
+            />}
+          </div>
+        </section>
       </div>
     </div>
   )

@@ -23,7 +23,7 @@ export function ctaFor(item: ActionItem): ActionCta {
     case 'missing_asset':
       return { label: 'Upload', to: '/vault' }
     case 'invoice_due':
-      return { label: 'Pay', to: '/billing' }
+      return { label: 'Pay', to: item.ref_id ? `/billing/invoices/${item.ref_id}` : '/billing' }
     case 'meeting_confirm':
       return { label: 'Confirm', to: '/requests' }
     case 'info_request':

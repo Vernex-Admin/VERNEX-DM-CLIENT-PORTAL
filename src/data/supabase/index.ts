@@ -2,6 +2,7 @@ import type { DataLayer } from '../types'
 import { actionItems } from './actionItems'
 import { activity } from './activity'
 import { aiDrafts } from './aiDrafts'
+import { agreements } from './agreements'
 import { supabaseAuth, supabaseSession } from './auth'
 import { clients } from './clients'
 import { comments } from './comments'
@@ -10,6 +11,7 @@ import { documents } from './documents'
 import { files } from './files'
 import { founderBox } from './founderBox'
 import { invoices } from './invoices'
+import { invoiceSettings } from './invoiceSettings'
 import { leads } from './leads'
 import { milestones } from './milestones'
 import { onboarding } from './onboarding'
@@ -33,6 +35,7 @@ export const supabaseData: DataLayer = {
   revisions,
   serviceRequests,
   invoices,
+  invoiceSettings,
   actionItems,
   comments,
   files,
@@ -44,5 +47,6 @@ export const supabaseData: DataLayer = {
   activity,
   onboarding,
   documents,
+  agreements,
   templates,
 }
