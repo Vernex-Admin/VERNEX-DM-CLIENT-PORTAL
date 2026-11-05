@@ -15,6 +15,7 @@ Run each file once, in order, in Supabase: SQL Editor -> New query -> paste the 
 | 07_check.sql | Health check. Every row should say OK. |
 | 08_integrity.sql | Hardening: refuses rows that point at another client's project, milestone, deliverable or comment target |
 | 10_client_code_login.sql | Private Client Code hashes and server-side sign-in attempt limits |
+| `../migrations/20261025120000_client_management.sql` | Client Codes (VXC-1001...), login codes, staff-readable passwords, the client details form with Vernex lock |
 | `../migrations/20261022120000_agreement_signing.sql` | Agreement templates, draft/sign/send lifecycle, private signatures, audit events, RLS, and onboarding gate integration |
 | `../migrations/20261023120000_invoice_generator.sql` | Invoice Generator: editable invoice documents, server-side totals, draft/issue/revision lifecycle, manual payment status with audit history, company defaults, templates, private logo/QR images, disabled payment-gateway hook |
 | `../migrations/20261024120000_invoice_generator_issue_and_audit.sql` | Invoice Generator part 2: client notice (Action Required) on issue, resolved when paid or cancelled; names in the audit history; description limits so a row fits one A4 page; no duplicated rows or line items |
@@ -37,6 +38,40 @@ Function secret; never add that key to a browser `.env` file. Client Codes are l
 hash, and email identifiers are resolved against active profiles. The function then asks Supabase
 Auth to verify the actual password. The browser receives only the normal Supabase auth session and
 loads the signed-in profile under that user's RLS permissions.
+
+## Client Management (Client Codes, logins, client details)
+
+Apply `../migrations/20261025120000_client_management.sql` with `supabase db push` after the earlier
+migrations, once you have confirmed the target project, then deploy both functions:
+
+```
+supabase functions deploy client-credentials
+supabase functions deploy login-with-identifier
+```
+
+What it does:
+- Every client gets a Client Code from a sequence: `VXC-1001`, `VXC-1002`, ... Existing clients are
+  numbered in the order they were created. A trigger assigns the code on insert (a supplied one is
+  ignored) and refuses any change to it.
+- Clients sign in with their Client Code and password only. Email sign-in is limited to Vernex staff.
+  A client's first person signs in with the Client Code itself; further people get `VXC-1001-2`, `-3`, ...
+- Staff set up a login or reset a password from Client Management (or a client's Login tab). The
+  `client-credentials` Edge Function sets the Supabase Auth password, the login code and its lookup hash.
+  People added without an email get a reserved `@clients.vernex.invalid` address for Supabase Auth;
+  it can never receive mail and the app never shows it.
+- **Passwords are stored readable** in `client_credentials` so staff can look them up, as requested.
+  No browser role can read that table; staff read it only through `list_client_credentials()`, which
+  checks they are staff and the client is theirs. Anyone with the service-role key or database access
+  can read these passwords, so keep that access tight. A client can change their own password from
+  Profile; Vernex then sees the new one.
+- `clients.details` holds the client's answers to the details form and `clients.detail_fields` the
+  questions for that client (null means the app's standard form). Clients write only through
+  `save_client_details()`, which refuses once Vernex has locked the details
+  (`set_client_details_lock()`). Staff can edit the answers at any time.
+
+People who already had a Client Code from `10_client_code_login.sql` keep signing in with it, but
+Client Management shows them as "No login yet" because only a hash of that code was stored. Use
+"Set up login" to give them a new code and password that staff can see.
 
 ## Admin account
 

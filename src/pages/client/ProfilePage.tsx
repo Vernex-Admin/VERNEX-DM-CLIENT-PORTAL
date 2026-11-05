@@ -2,7 +2,9 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { QueryError } from '../../components/QueryError'
 import { Button, Card, CardBody, CardHeader, Field, Input, Skeleton, Switch, useToast } from '../../components/ui'
-import { useCurrentProfile, useUpdateMe } from '../../lib/queries'
+import { isLoginOnlyEmail, passwordError } from '../../lib/credentials'
+import { useCan } from '../../lib/permissions'
+import { useChangeMyPassword, useCurrentProfile, useUpdateMe } from '../../lib/queries'
 import type { NotificationPrefs, Profile } from '../../types/db'
 
 const PREFS: { key: keyof NotificationPrefs; label: string; description?: string }[] = [
@@ -38,7 +40,10 @@ export default function ProfilePage() {
       ) : profile.isError ? (
         <QueryError what="your profile" onRetry={() => profile.refetch()} />
       ) : profile.data ? (
-        <ProfileForm key={profile.data.id} profile={profile.data} />
+        <>
+          <ProfileForm key={profile.data.id} profile={profile.data} />
+          <ChangePassword />
+        </>
       ) : (
         <p className="text-ink-muted">Sign in to see your profile.</p>
       )}
@@ -87,9 +92,16 @@ function ProfileForm({ profile }: { profile: Profile }) {
           <Field label="WhatsApp number" hint="We use this for WhatsApp updates. Example: +91 98765 43210" error={errors.phone}>
             <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" />
           </Field>
-          <Field label="Email" hint="To change your email, ask your Vernex contact.">
-            <Input value={profile.email} readOnly />
-          </Field>
+          {profile.login_code && (
+            <Field label="Client Code" hint="You sign in with this code. Only Vernex can change it.">
+              <Input value={profile.login_code} readOnly className="font-mono" />
+            </Field>
+          )}
+          {!isLoginOnlyEmail(profile.email) && (
+            <Field label="Email" hint="To change your email, ask your Vernex contact.">
+              <Input value={profile.email} readOnly />
+            </Field>
+          )}
         </CardBody>
       </Card>
 
@@ -120,6 +132,61 @@ function ProfileForm({ profile }: { profile: Profile }) {
           Save changes
         </Button>
       </div>
+    </form>
+  )
+}
+
+function ChangePassword() {
+  const toast = useToast()
+  const change = useChangeMyPassword()
+  const canChange = useCan('own_password', 'edit')
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [errors, setErrors] = useState<{ current?: string; next?: string; confirm?: string }>({})
+  if (!canChange) return null
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    const found = {
+      current: current ? undefined : 'Enter your current password.',
+      next: passwordError(next),
+      confirm: confirm === next ? undefined : 'The two new passwords are different.',
+    }
+    setErrors(found)
+    if (found.current || found.next || found.confirm) return
+    try {
+      await change.mutateAsync({ current_password: current, new_password: next })
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      toast({ title: 'Password changed', description: 'Use the new password next time you sign in.', tone: 'ok' })
+    } catch (error) {
+      toast({ title: 'Could not change your password', description: error instanceof Error ? error.message : undefined, tone: 'bad' })
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} noValidate aria-label="Change password">
+      <Card>
+        <CardHeader title="Password" description="Change the password you sign in with. Your Client Code stays the same." />
+        <CardBody className="flex flex-col gap-4">
+          <Field label="Current password" required error={errors.current}>
+            <Input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} autoComplete="current-password" />
+          </Field>
+          <Field label="New password" required hint="At least 8 characters with letters and numbers." error={errors.next}>
+            <Input type="password" value={next} onChange={(event) => setNext(event.target.value)} autoComplete="new-password" />
+          </Field>
+          <Field label="Confirm new password" required error={errors.confirm}>
+            <Input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
+          </Field>
+          <div className="flex justify-end">
+            <Button type="submit" loading={change.isPending}>
+              Change password
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
     </form>
   )
 }

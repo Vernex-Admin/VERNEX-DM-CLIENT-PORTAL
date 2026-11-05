@@ -1,4 +1,4 @@
-import { FileCheck, FileText, Receipt, SquareKanban, Users } from 'lucide-react'
+import { FileCheck, Receipt, UserCog, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useSearchParams } from 'react-router'
 import { cn } from '../../lib/cn'
@@ -11,17 +11,15 @@ import { UserMenu } from './UserMenu'
 type NavItem = { to: string; label: string; icon: LucideIcon; show: boolean }
 
 export function AdminShell() {
-  const canSeeLeads = useCan('lead', 'view')
-  const canSeeTemplates = useCan('template', 'view')
+  const canManageAccess = useCan('client_access', 'view')
   const { data: clients = [] } = useClients()
   const [params, setParams] = useSearchParams()
 
   const items: NavItem[] = [
     { to: '/admin/clients', label: 'Clients', icon: Users, show: true },
-    { to: '/admin/pipeline', label: 'Pipeline', icon: SquareKanban, show: canSeeLeads },
+    { to: '/admin/client-management', label: 'Client Management', icon: UserCog, show: canManageAccess },
     { to: '/admin/agreement', label: 'Agreement', icon: FileCheck, show: true },
     { to: '/admin/invoices', label: 'Invoices', icon: Receipt, show: true },
-    { to: '/admin/templates', label: 'Templates', icon: FileText, show: canSeeTemplates },
   ].filter((item) => item.show)
 
   function pickClient(id: string) {

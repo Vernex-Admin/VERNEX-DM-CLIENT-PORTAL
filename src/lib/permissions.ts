@@ -28,8 +28,23 @@ export type Resource =
   | 'document'
   | 'template'
   | 'staff'
+  // The details form a client fills in, and Vernex reviews and locks.
+  | 'client_details'
+  // Client Codes, login codes and passwords. Staff only.
+  | 'client_access'
+  // A client user changing their own password.
+  | 'own_password'
 
-export type Action = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'request_revision' | 'upload' | 'submit'
+export type Action =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'approve'
+  | 'request_revision'
+  | 'upload'
+  | 'submit'
+  | 'lock'
 
 export type Permission = `${Resource}:${Action}`
 
@@ -71,6 +86,14 @@ const STAFF: readonly Permission[] = [
   'internal_comment:create',
   'social_metrics:view',
   'social_metrics:create',
+  // Staff edit a client's details at any time, change the form per client, and lock it.
+  'client_details:view',
+  'client_details:edit',
+  'client_details:lock',
+  // Staff issue and reset logins, and can read the current password.
+  'client_access:view',
+  'client_access:create',
+  'client_access:edit',
 ]
 
 // Client roles: view their own client's data, plus client actions.
@@ -99,6 +122,10 @@ const CLIENT: readonly Permission[] = [
   'brand_asset:upload',
   'comment:create',
   'founder_box:create',
+  // Fill in their own details until Vernex locks them (the lock is checked by the data layer).
+  'client_details:view',
+  'client_details:submit',
+  'own_password:edit',
 ]
 
 export const POLICY: Record<UserRole, readonly Permission[]> = {

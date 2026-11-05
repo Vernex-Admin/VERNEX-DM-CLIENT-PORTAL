@@ -28,6 +28,7 @@ function profile(role: Profile['role']): Profile {
     can_approve: true,
     is_active: true,
     notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
+    login_code: null,
     created_at: new Date(0).toISOString(),
   }
 }

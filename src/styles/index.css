@@ -146,12 +146,17 @@
 .agreement-page-number { margin: 8mm 0 0; color: #6b625a; font: 8pt Arial, sans-serif; text-align: center; }
 .agreement-closing-page { position: relative; box-sizing: border-box; width: 210mm; height: 297mm; overflow: hidden; flex: none; background: #fff; box-shadow: 0 4px 20px rgb(29 25 20 / 12%); container-type: inline-size; }
 .agreement-closing-art { display: block; width: 100%; height: 100%; object-fit: fill; }
-.agreement-closing-client-signature { position: absolute; left: 48.5%; top: 75.8%; width: 27%; height: 6.2%; object-fit: contain; object-position: left center; }
-.agreement-closing-client-name { position: absolute; left: 63.2%; top: 82.25%; width: 22%; height: 2.5%; overflow: hidden; background: #fff; color: #171717; font: clamp(5px, 1.2cqw, 10px)/1.3 Arial, sans-serif; white-space: nowrap; }
-.agreement-closing-client-name.long { font-size: clamp(4px, .8cqw, 7px); }
-.agreement-closing-time { position: absolute; top: 90.4%; width: 43%; height: 4.8%; overflow: hidden; color: #171717; font: clamp(5px, .85cqw, 8px)/1.25 Arial, sans-serif; }
-.agreement-closing-time.founder-time { left: 9.5%; }
-.agreement-closing-time.client-time { left: 50%; }
+/* Positions match the lines of the artwork and src/lib/agreementClosingPage.ts. Text sits on a line. */
+.agreement-closing-client-signature { position: absolute; left: 50.4%; top: 76.7%; width: 26.9%; height: 5.5%; object-fit: contain; object-position: left bottom; }
+.agreement-closing-client-name, .agreement-closing-date { position: absolute; display: flex; height: 2.1%; align-items: flex-end; overflow: hidden; color: #171717; font: clamp(5px, 1.45cqw, 10pt)/1 Arial, sans-serif; white-space: nowrap; }
+.agreement-closing-client-name { left: 63.6%; top: 81.9%; width: 22%; }
+.agreement-closing-client-name.long { font-size: clamp(4px, 1cqw, 7pt); }
+.agreement-closing-date { top: 86.6%; width: 23%; }
+.agreement-closing-date.founder-date { left: 15.6%; }
+.agreement-closing-date.client-date { left: 56.4%; }
+.agreement-closing-time { position: absolute; top: 91.2%; width: 40%; height: 4.8%; overflow: hidden; color: #171717; font: bold clamp(4px, .95cqw, 6.2pt)/1.2 Arial, sans-serif; }
+.agreement-closing-time.founder-time { left: 9.3%; }
+.agreement-closing-time.client-time { left: 50.04%; }
 .client-agreement-closing { width: 100%; overflow-x: auto; }
 .client-agreement-closing .agreement-closing-page { width: min(100%, 210mm); height: auto; aspect-ratio: 210 / 297; }
 @media (max-width: 1023px) {
@@ -191,8 +196,8 @@
   .agreement-page-number { display: none !important; }
   .agreement-closing-page { width: 210mm !important; height: 297mm !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; break-before: page !important; page-break-before: always !important; break-after: auto !important; page-break-after: auto !important; }
   .agreement-closing-time { font-size: 6pt !important; }
-  .agreement-closing-client-name { font-size: 8pt !important; }
-  .agreement-closing-client-name.long { font-size: 6pt !important; }
+  .agreement-closing-client-name, .agreement-closing-date { font-size: 10pt !important; }
+  .agreement-closing-client-name.long { font-size: 7pt !important; }
 }
 
 /* ---------------------------------------------------------------------------

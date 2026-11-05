@@ -43,15 +43,6 @@ describe('onboarding screens', () => {
     await waitFor(() => expect(screen.getByText(/of 48 done/).textContent).not.toBe(before))
   })
 
-  it('fills a template for the chosen client and keeps unknown fields as {{field}}', async () => {
-    await mockData.session.switchProfile(SEED_IDS.founder)
-    renderAt('/admin/templates')
-    expect(await screen.findByText('Message Templates')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Merge with client:'), { target: { value: SEED_IDS.agk } })
-    await waitFor(() => expect(screen.getAllByText(/AGK Fitness/).length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/\{\{kickoff_time\}\}/).length).toBeGreaterThan(0)
-  })
-
   it('shows the client admin the setup form with their own items, and saving goes to the dashboard', async () => {
     await mockData.session.switchProfile(SEED_IDS.agkAdmin)
     renderAt('/setup')

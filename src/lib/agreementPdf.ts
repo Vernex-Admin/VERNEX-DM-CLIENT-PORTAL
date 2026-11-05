@@ -1,186 +1,277 @@
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import type { PDFFont, PDFPage, PDFEmbeddedPage } from 'pdf-lib'
 import type { Agreement } from '../types/db'
 import type { AgreementContent } from '../types/agreement'
+
+// The agreement body on the Vernex letterhead (public/templates/AGREEMENT_TEMPLATE.pdf).
+// Every page is A4 with the letterhead behind it; the text sits in the white area between the
+// header band and the footer shape. The fixed closing page is appended separately
+// (agreementClosingPage.ts). The browser preview, the mock and the Edge Function all use this file,
+// so the downloaded PDF matches the preview exactly.
 
 export type AgreementPdfInput = Pick<Agreement, 'title' | 'signed_content' | 'founder_signed_at' | 'client_signed_at' | 'founder_user_id' | 'client_user_id'> & {
   founderName: string
   clientName: string
-  logo?: Uint8Array
+  /** The letterhead PDF. Without it the pages are plain white with the same margins. */
+  letterhead?: Uint8Array
+  /** Pages added after the body (the closing page), counted in "Page x of y". */
+  trailingPages?: number
 }
 
-const encoder = new TextEncoder()
+export const LETTERHEAD_URL = '/templates/AGREEMENT_TEMPLATE.pdf'
+
 const PAGE_WIDTH = 595.28
 const PAGE_HEIGHT = 841.89
-const MARGIN_X = 48
+// Measured on the letterhead: the header band ends 150pt from the top and the footer shape rises
+// 30pt from the bottom. The side margins line up with the text on the closing page.
+const MARGIN_X = 58
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_X * 2
-const CONTENT_BOTTOM = 52
-const encoderSafe = (value: string) => value
-  .replace(/\u20b9/g, 'INR ')
-  .replace(/[\u201c\u201d]/g, '"')
-  .replace(/[\u2018\u2019]/g, "'")
-  .replace(/[\u2013\u2014]/g, '-')
-  .replace(/\u2026/g, '...')
-  .replace(/[^\x20-\x7e]/g, '?')
-  .replace(/[\\()]/g, '\\$&')
+const CONTENT_TOP = PAGE_HEIGHT - 150 - 30
+const CONTENT_BOTTOM = 72
+const FOOTER_Y = 40
 
-function wrap(value: string, size: number, width = CONTENT_WIDTH): string[] {
-  const maxChars = Math.max(16, Math.floor(width / (size * 0.52)))
-  const result: string[] = []
+const INK = rgb(0.09, 0.09, 0.09)
+const MUTED = rgb(0.4, 0.38, 0.35)
+const NAVY = rgb(0.11, 0.16, 0.27)
+const GOLD = rgb(0.73, 0.54, 0.21)
+
+const BODY = 10
+const LEADING = 15
+const INDENT = 14
+
+type Fonts = { regular: PDFFont; bold: PDFFont }
+
+/** DD/MM/YYYY for a YYYY-MM-DD date; anything else unchanged. */
+function displayDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.trim()
+}
+
+/** Characters the standard fonts cannot draw are replaced, so a stray symbol never breaks the PDF. */
+function printable(value: string, font: PDFFont): string {
+  const supported = new Set(font.getCharacterSet())
+  return Array.from(value.replace(/₹\s?/g, 'INR ').replace(/\t/g, '    '))
+    .map((char) => (supported.has(char.codePointAt(0) as number) ? char : '?'))
+    .join('')
+}
+
+type Line = { words: string[]; last: boolean }
+
+/** Wraps by measured width. A word longer than the line is broken into pieces. */
+function wrap(value: string, font: PDFFont, size: number, width: number): Line[] {
+  const lines: Line[] = []
+  const space = font.widthOfTextAtSize(' ', size)
   for (const paragraph of value.split(/\r?\n/)) {
-    if (!paragraph.trim()) { result.push(''); continue }
-    let line = ''
-    for (const originalWord of paragraph.trim().split(/\s+/)) {
-      const chunks = originalWord.length > maxChars
-        ? originalWord.match(new RegExp(`.{1,${maxChars}}`, 'g')) ?? [originalWord]
-        : [originalWord]
-      for (const word of chunks) {
-        if (line && `${line} ${word}`.length > maxChars) { result.push(line); line = word }
-        else line = line ? `${line} ${word}` : word
+    const words = paragraph.trim().split(/\s+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push({ words: [], last: true })
+      continue
+    }
+    let current: string[] = []
+    let currentWidth = 0
+    for (const original of words) {
+      const pieces: string[] = []
+      let rest = original
+      while (font.widthOfTextAtSize(rest, size) > width) {
+        let cut = rest.length - 1
+        while (cut > 1 && font.widthOfTextAtSize(rest.slice(0, cut), size) > width) cut--
+        pieces.push(rest.slice(0, cut))
+        rest = rest.slice(cut)
+      }
+      pieces.push(rest)
+      for (const word of pieces) {
+        const wordWidth = font.widthOfTextAtSize(word, size)
+        if (current.length && currentWidth + space + wordWidth > width) {
+          lines.push({ words: current, last: false })
+          current = []
+          currentWidth = 0
+        }
+        currentWidth += (current.length ? space : 0) + wordWidth
+        current.push(word)
       }
     }
-    if (line) result.push(line)
+    lines.push({ words: current, last: true })
   }
-  return result
+  return lines
 }
 
-function concat(chunks: Uint8Array[]): Uint8Array {
-  const size = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-  const output = new Uint8Array(size)
-  let offset = 0
-  for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.length }
-  return output
-}
+type Align = 'left' | 'center' | 'right' | 'justify'
 
-function streamObject(dictionary: string, stream: Uint8Array): Uint8Array {
-  return concat([encoder.encode(`<< ${dictionary} /Length ${stream.length} >>\nstream\n`), stream, encoder.encode('\nendstream')])
-}
+class Writer {
+  pages: PDFPage[] = []
+  page!: PDFPage
+  y = CONTENT_TOP
 
-function pngRgb(data: Uint8Array) {
-  if (data.length < 33 || data[0] !== 137 || data[1] !== 80 || data[2] !== 78 || data[3] !== 71) return null
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-  const width = view.getUint32(16)
-  const height = view.getUint32(20)
-  const depth = data[24] as number
-  const colorType = data[25] as number
-  if (!width || !height || depth !== 8 || colorType !== 2) return null
-  const chunks: Uint8Array[] = []
-  let offset = 8
-  while (offset + 12 <= data.length) {
-    const length = view.getUint32(offset)
-    const tag = String.fromCharCode(...data.subarray(offset + 4, offset + 8))
-    if (tag === 'IDAT') chunks.push(data.subarray(offset + 8, offset + 8 + length))
-    offset += length + 12
-    if (tag === 'IEND') break
+  constructor(
+    private readonly document: PDFDocument,
+    private readonly fonts: Fonts,
+    private readonly letterhead: PDFEmbeddedPage | null,
+  ) {
+    this.newPage()
   }
-  if (!chunks.length) return null
-  return { width, height, compressed: concat(chunks) }
+
+  newPage() {
+    this.page = this.document.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+    if (this.letterhead) this.page.drawPage(this.letterhead, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
+    this.pages.push(this.page)
+    this.y = CONTENT_TOP
+  }
+
+  /** Starts a new page unless `height` more points fit on this one. */
+  ensure(height: number) {
+    if (this.y - height < CONTENT_BOTTOM) this.newPage()
+  }
+
+  space(points: number) {
+    // Space at the top of a page is dropped so every page starts at the same line.
+    if (this.y < CONTENT_TOP) this.y -= points
+  }
+
+  lines(value: string, size: number, bold: boolean, width: number) {
+    const font = bold ? this.fonts.bold : this.fonts.regular
+    return wrap(printable(value, font), font, size, width)
+  }
+
+  text(
+    value: string,
+    options: { size?: number; bold?: boolean; indent?: number; align?: Align; color?: ReturnType<typeof rgb>; leading?: number; keep?: number } = {},
+  ) {
+    const { size = BODY, bold = false, indent = 0, align = 'left', color = INK, leading = size * 1.5, keep = 1 } = options
+    const font = bold ? this.fonts.bold : this.fonts.regular
+    const width = CONTENT_WIDTH - indent
+    const lines = this.lines(value, size, bold, width)
+    // Keep the first `keep` lines together so a paragraph never starts with one line at a page foot.
+    this.ensure(Math.min(keep, lines.length) * leading)
+    const space = font.widthOfTextAtSize(' ', size)
+    for (const line of lines) {
+      this.ensure(leading)
+      const baseline = this.y - size
+      const natural = line.words.reduce((sum, word) => sum + font.widthOfTextAtSize(word, size), 0)
+      const gaps = line.words.length - 1
+      const textWidth = natural + gaps * space
+      let x = MARGIN_X + indent
+      if (align === 'center') x += (width - textWidth) / 2
+      if (align === 'right') x += width - textWidth
+      // Justified lines spread their spaces; a line that would gape (few long words) stays left aligned.
+      const stretch = align === 'justify' && !line.last && gaps > 0 ? (width - natural) / gaps : space
+      const wordGap = stretch <= space * 3.5 ? stretch : space
+      for (const word of line.words) {
+        this.page.drawText(word, { x, y: baseline, size, font, color })
+        x += font.widthOfTextAtSize(word, size) + wordGap
+      }
+      this.y -= leading
+    }
+  }
+
+  rule(width: number, color = GOLD, thickness = 0.8) {
+    const x = MARGIN_X + (CONTENT_WIDTH - width) / 2
+    this.page.drawLine({ start: { x, y: this.y }, end: { x: x + width, y: this.y }, thickness, color })
+  }
 }
 
-/** Build a paginated A4 PDF with 16.9 mm margins and flow-through clauses. */
-export function buildAgreementPdf(input: AgreementPdfInput): Uint8Array {
+/** The agreement body as A4 pages on the letterhead, with "Page x of y" on each. */
+export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8Array> {
   const content = input.signed_content
   if (!content) throw new Error('Agreement content is required to generate the PDF.')
 
-  const pages: string[] = []
-  let stream = ''
-  let y = 745
-  const startPage = () => {
-    stream = '0.84 g 48 785 499 0.7 re f 0 g\n'
-      + 'BT /F2 9 Tf 420 794 Td (VERNEX DIGITAL MARKETING) Tj ET\n'
-      + 'BT /F1 8 Tf 420 780 Td (+91 9789912805  |  www.vernex.in) Tj ET\n'
-    if (input.logo?.length) stream += 'q 72 0 0 54 48 766 cm /Logo Do Q\n'
-    stream += '0.7 w 48 756 m 547 756 l S\n'
-    y = 738
+  const document = await PDFDocument.create()
+  const fonts: Fonts = {
+    regular: await document.embedFont(StandardFonts.Helvetica),
+    bold: await document.embedFont(StandardFonts.HelveticaBold),
   }
-  const finishPage = () => pages.push(stream)
-  const newPage = () => { finishPage(); startPage() }
-  const ensureRoom = (height: number) => { if (y - height < CONTENT_BOTTOM) newPage() }
-  const drawLine = (line: string, size: number, indent: number, bold: boolean) => {
-    if (y - size - 4 < CONTENT_BOTTOM) newPage()
-    stream += `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${MARGIN_X + indent} ${y} Td (${encoderSafe(line)}) Tj ET\n`
-    y -= size + 4
+  let letterhead: PDFEmbeddedPage | null = null
+  if (input.letterhead?.length) {
+    const [embedded] = await document.embedPdf(input.letterhead, [0])
+    letterhead = embedded ?? null
   }
-  const drawText = (value: string, size = 10, indent = 0, bold = false, width = CONTENT_WIDTH - indent) => {
-    for (const line of wrap(value, size, width)) drawLine(line, size, indent, bold)
-  }
-  const section = (label: string, value: string) => {
-    if (!value.trim()) return
-    ensureRoom(34)
-    drawText(label, 11, 0, true)
-    drawText(value, 10, 10)
-    y -= 5
-  }
-
-  startPage()
-  drawText('DEVELOPER ENGAGEMENT & NON-OWNERSHIP AGREEMENT', 12, 0, true)
-  drawText(input.title, 15, 0, true)
-  drawText(content.projectTitle, 11, 0, true)
-  drawText(`Agreement date: ${content.agreementDate}`, 10)
-  drawText(`Client: ${content.clientName}${content.clientEmail ? ` (${content.clientEmail})` : ''}`, 10)
-  y -= 4
-  drawText(`This Agreement is made on this ${content.agreementDate}, at Chennai, India, by and between:`, 9.5)
-  drawText(`${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "Company" (which includes its successors and assigns),`, 9.5, 10)
-  drawText('AND', 9.5, 0, true)
-  drawText(`${content.clientName || content.developerName}, hereinafter referred to as the "Developer" (which expression shall include his heirs, legal representatives, and permitted assigns).`, 9.5, 10)
-  y -= 4
-  section('SERVICES', content.services)
-  section('SCOPE OF WORK', content.scope)
-  section('PAYMENT TERMS', content.paymentTerms)
-  section('TERM DATES', [content.startDate && `Start: ${content.startDate}`, content.endDate && `End: ${content.endDate}`].filter(Boolean).join('  |  '))
-  drawText('TERMS AND CONDITIONS', 12, 0, true)
-  y -= 3
-
-  for (const clause of content.clauses) {
-    const body = clause.body.replace(/{{projectTitle}}/g, content.projectTitle)
+  const w = new Writer(document, fonts, letterhead)
+  const fill = (body: string) =>
+    body
+      .replace(/{{projectTitle}}/g, content.projectTitle)
       .replace(/{{developerName}}/g, content.developerName)
       .replace(/{{companyName}}/g, content.companyName)
       .replace(/{{companySigner}}/g, content.companySigner)
-    const titleLines = wrap(`${clause.number}. ${clause.title}`, 11)
-    const firstBodyLine = wrap(body, 10)[0] ?? ''
-    ensureRoom((titleLines.length + (firstBodyLine ? 1 : 0)) * 14 + 8)
-    for (const line of titleLines) drawLine(line, 11, 0, true)
-    drawText(body, 10, 10)
-    y -= 7
+
+  // Title block.
+  w.text('DEVELOPER ENGAGEMENT & NON-OWNERSHIP AGREEMENT', { size: 13, bold: true, align: 'center', color: NAVY, leading: 18 })
+  w.space(4)
+  w.rule(110)
+  w.space(14)
+  w.text(input.title.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
+  if (content.projectTitle.trim() && !input.title.toLowerCase().includes(content.projectTitle.trim().toLowerCase())) {
+    w.text(content.projectTitle, { size: 10, align: 'center', color: MUTED })
+  }
+  w.space(10)
+  if (content.agreementDate.trim()) w.text(`Date: ${displayDate(content.agreementDate)}`, { size: 9.5, align: 'right', color: MUTED })
+  w.space(6)
+
+  // Parties.
+  w.text(`This Agreement is made on this ${displayDate(content.agreementDate)}, at Chennai, India, by and between:`, { align: 'justify' })
+  w.space(4)
+  w.text(
+    `${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "Company" (which includes its successors and assigns),`,
+    { indent: INDENT, align: 'justify', keep: 2 },
+  )
+  w.space(4)
+  w.text('AND', { bold: true, align: 'center' })
+  w.space(4)
+  w.text(
+    `${content.clientName || content.developerName}, hereinafter referred to as the "Developer" (which expression shall include his heirs, legal representatives, and permitted assigns).`,
+    { indent: INDENT, align: 'justify', keep: 2 },
+  )
+  if (content.clientEmail.trim()) w.text(`Email: ${content.clientEmail}`, { indent: INDENT, size: 9.5, color: MUTED })
+
+  // Agreement details.
+  const term = [content.startDate && `Start: ${displayDate(content.startDate)}`, content.endDate && `End: ${displayDate(content.endDate)}`]
+    .filter(Boolean)
+    .join('   |   ')
+  const sections: [string, string][] = [
+    ['SERVICES', content.services],
+    ['SCOPE OF WORK', content.scope],
+    ['PAYMENT TERMS', content.paymentTerms],
+    ['TERM DATES', term],
+  ]
+  for (const [label, value] of sections) {
+    if (!value.trim()) continue
+    w.space(10)
+    // The label never sits alone at the foot of a page.
+    w.ensure(LEADING * 3)
+    w.text(label, { size: 10, bold: true, color: NAVY })
+    w.text(value, { indent: INDENT, align: 'justify', keep: 2 })
   }
 
-  finishPage()
+  // Terms and conditions.
+  if (content.clauses.length) {
+    w.space(16)
+    w.ensure(LEADING * 5)
+    w.text('TERMS AND CONDITIONS', { size: 11.5, bold: true, align: 'center', color: NAVY, leading: 16 })
+    w.space(3)
+    w.rule(110)
+    w.space(12)
+    for (const clause of content.clauses) {
+      w.ensure(LEADING * 3)
+      w.text(`${clause.number}. ${clause.title}`, { size: 10.5, bold: true, leading: 16 })
+      w.text(fill(clause.body), { indent: INDENT, align: 'justify', keep: 2 })
+      w.space(8)
+    }
+  }
 
-  const objects: Uint8Array[] = []
-  const add = (body: string | Uint8Array) => { objects.push(typeof body === 'string' ? encoder.encode(body) : body); return objects.length }
-  const catalogId = add('')
-  const pagesId = add('')
-  const regularFontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>')
-  const boldFontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>')
-  const logoInfo = input.logo ? pngRgb(input.logo) : null
-  const logoId = logoInfo
-    ? add(streamObject(`/Type /XObject /Subtype /Image /Width ${logoInfo.width} /Height ${logoInfo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns ${logoInfo.width} >>`, logoInfo.compressed))
-    : null
-  const pageRefs: number[] = []
-  const totalPages = pages.length
-  pages.forEach((page, index) => {
-    const pageStream = `${page}BT /F1 8 Tf 268 27 Td (Page ${index + 1} of ${totalPages}) Tj ET\n`
-    const contentId = add(streamObject('', encoder.encode(pageStream)))
-    const images = [logoId && `/Logo ${logoId} 0 R`].filter(Boolean).join(' ')
-    const pageId = add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 ${regularFontId} 0 R /F2 ${boldFontId} 0 R >> /XObject << ${images} >> >> /Contents ${contentId} 0 R >>`)
-    pageRefs.push(pageId)
+  const total = w.pages.length + (input.trailingPages ?? 0)
+  w.pages.forEach((page, index) => {
+    const label = `Page ${index + 1} of ${total}`
+    const size = 8
+    page.drawText(label, {
+      x: (PAGE_WIDTH - fonts.regular.widthOfTextAtSize(label, size)) / 2,
+      y: FOOTER_Y,
+      size,
+      font: fonts.regular,
+      color: MUTED,
+    })
   })
-  objects[catalogId - 1] = encoder.encode(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`)
-  objects[pagesId - 1] = encoder.encode(`<< /Type /Pages /Count ${pageRefs.length} /Kids [${pageRefs.map((id) => `${id} 0 R`).join(' ')}] >>`)
-  const header = encoder.encode('%PDF-1.4\n%Vernex A4 agreement\n')
-  const chunks: Uint8Array[] = [header]
-  const offsets = [0]
-  let offset = header.length
-  objects.forEach((body, index) => {
-    offsets.push(offset)
-    const object = concat([encoder.encode(`${index + 1} 0 obj\n`), body, encoder.encode('\nendobj\n')])
-    chunks.push(object)
-    offset += object.length
-  })
-  const xrefOffset = offset
-  const xref = [`xref\n0 ${objects.length + 1}\n`, '0000000000 65535 f \n', ...offsets.slice(1).map((item) => `${String(item).padStart(10, '0')} 00000 n \n`)].join('')
-  chunks.push(encoder.encode(xref))
-  chunks.push(encoder.encode(`trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`))
-  return concat(chunks)
 
+  document.setTitle(input.title)
+  document.setProducer('Vernex Hub')
+  return document.save()
 }
 
 export function agreementContentForSnapshot(content: AgreementContent): AgreementContent {

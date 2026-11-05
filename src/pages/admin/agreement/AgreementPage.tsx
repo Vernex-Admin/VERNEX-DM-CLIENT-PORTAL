@@ -14,7 +14,7 @@ import type { Agreement } from '../../../types/db'
 import type { AgreementContent } from '../../../types/agreement'
 import { formatClientSignedAt } from '../../../lib/agreementTime'
 import { appendClosingPage, CLOSING_PAGE_URL } from '../../../lib/agreementClosingPage'
-import { buildAgreementPdf } from '../../../lib/agreementPdf'
+import { buildAgreementPdf, LETTERHEAD_URL } from '../../../lib/agreementPdf'
 
 export type Clause = {
   id: string
@@ -245,13 +245,14 @@ export default function AgreementPage() {
     const createPreview = async () => {
       try {
         const content = JSON.parse(previewContentJson) as AgreementContent
-        const [logoResponse, closingResponse] = await Promise.all([
-          fetch('/vernex-digital-marketing.png'),
+        const [letterheadResponse, closingResponse] = await Promise.all([
+          fetch(LETTERHEAD_URL),
           fetch(CLOSING_PAGE_URL),
         ])
         if (!closingResponse.ok) throw new Error('The fixed closing page template is unavailable.')
-        const logo = logoResponse.ok ? new Uint8Array(await logoResponse.arrayBuffer()) : undefined
-        const basePdf = buildAgreementPdf({
+        if (!letterheadResponse.ok) throw new Error('The agreement letterhead template is unavailable.')
+        const letterhead = new Uint8Array(await letterheadResponse.arrayBuffer())
+        const basePdf = await buildAgreementPdf({
           title: `${content.projectTitle || 'Services'} Agreement`,
           signed_content: content,
           founder_signed_at: selectedAgreement?.founder_signed_at ?? null,
@@ -260,7 +261,8 @@ export default function AgreementPage() {
           client_user_id: selectedAgreement?.client_user_id ?? null,
           founderName: content.companySigner,
           clientName: content.clientName,
-          logo,
+          letterhead,
+          trailingPages: 1,
         })
         const agreementPages = await PDFDocument.load(basePdf)
         const isSigned = selectedAgreement?.status === 'signed'
@@ -276,6 +278,7 @@ export default function AgreementPage() {
           signature,
           signedAt: isSigned ? selectedAgreement?.client_signed_at : null,
           timeZone: isSigned ? selectedAgreement?.client_timezone : null,
+          founderSignedAt: isSigned ? selectedAgreement?.founder_signed_at : null,
         })
         const pdfBuffer = new ArrayBuffer(pdf.byteLength)
         new Uint8Array(pdfBuffer).set(pdf)

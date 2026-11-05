@@ -3,6 +3,8 @@ import type {
   ActionItemInsert,
   Client,
   ClientAssignment,
+  ClientCredential,
+  ClientDetailField,
   ClientInsert,
   Comment,
   CommentTarget,
@@ -113,12 +115,46 @@ export interface SessionRepo {
   switchProfile(profileId: string | null): Promise<Profile | null>
 }
 
+export type ClientDetailsSave = {
+  client_id: string
+  /** Answers by field key. Only the keys of the client's form are kept. */
+  values: Record<string, string>
+  /** Client only: send the details to Vernex for review. Every required field must be answered. */
+  submit?: boolean
+}
+
 export interface ClientsRepo {
   list(): Promise<Client[]>
   get(id: string): Promise<Client>
+  /** The Client Code (VXC-1001, ...) is assigned here, never by the caller. */
   create(input: ClientInsert): Promise<Client>
   update(id: string, patch: Update<Client>): Promise<Client>
   remove(id: string): Promise<void>
+  /** A client saves their own details while they are unlocked; staff save any client's at any time. */
+  saveDetails(input: ClientDetailsSave): Promise<Client>
+  /** Staff only: the questions on this client's form. Null goes back to the standard fields. */
+  setDetailFields(clientId: string, fields: ClientDetailField[] | null): Promise<Client>
+  /** Staff only: lock the details (the client can then only read them) or unlock them. */
+  setDetailsLocked(clientId: string, locked: boolean): Promise<Client>
+}
+
+export type IssueLogin = {
+  profile_id: string
+  /** 8-72 characters with letters and numbers. */
+  password: string
+}
+
+/** Client sign-ins. Everything except changeMyPassword is staff only. */
+export interface ClientAccessRepo {
+  /** The login code and current password of every client user the signed-in staff member can see. */
+  list(): Promise<ClientCredential[]>
+  /**
+   * Sets up a person's login, or gives them a new password. The first person of a client signs in
+   * with the Client Code; each further person with the code and a number (VXC-1001-2).
+   */
+  issue(input: IssueLogin): Promise<ClientCredential>
+  /** A client user changes their own password. Vernex can still read the new one. */
+  changeMyPassword(input: { current_password: string; new_password: string }): Promise<void>
 }
 
 export type MyProfilePatch = Partial<Pick<Profile, 'full_name' | 'phone_e164'>> & {
@@ -487,6 +523,7 @@ export interface DataLayer {
   auth: AuthRepo
   session: SessionRepo
   clients: ClientsRepo
+  access: ClientAccessRepo
   profiles: ProfilesRepo
   projects: ProjectsRepo
   milestones: MilestonesRepo

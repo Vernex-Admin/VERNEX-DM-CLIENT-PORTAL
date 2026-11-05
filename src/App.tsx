@@ -23,17 +23,17 @@ const InvoiceViewPage = lazy(() => import('./pages/client/InvoiceViewPage'))
 const FounderBoxPage = lazy(() => import('./pages/client/FounderBoxPage'))
 const ProfilePage = lazy(() => import('./pages/client/ProfilePage'))
 const SetupPage = lazy(() => import('./pages/client/SetupPage'))
+const DetailsPage = lazy(() => import('./pages/client/DetailsPage'))
 const AuthCallbackPage = lazy(() => import('./pages/auth/AuthCallbackPage'))
 const StaffPage = lazy(() => import('./pages/admin/StaffPage'))
 
 const ClientsPage = lazy(() => import('./pages/admin/ClientsPage'))
 const ClientPage = lazy(() => import('./pages/admin/client/ClientPage'))
+const ClientManagementPage = lazy(() => import('./pages/admin/ClientManagementPage'))
 const PreviewPage = lazy(() => import('./pages/admin/client/PreviewPage'))
-const PipelinePage = lazy(() => import('./pages/admin/PipelinePage'))
 const OutboxPage = lazy(() => import('./pages/admin/OutboxPage'))
 const FounderInboxPage = lazy(() => import('./pages/admin/FounderInboxPage'))
 const AiDraftsPage = lazy(() => import('./pages/admin/AiDraftsPage'))
-const TemplatesPage = lazy(() => import('./pages/admin/TemplatesPage'))
 const AgreementPage = lazy(() => import('./pages/admin/agreement/AgreementPage'))
 const InvoiceGeneratorPage = lazy(() => import('./pages/admin/invoice/InvoiceGeneratorPage'))
 const InvoicesPage = lazy(() => import('./pages/admin/invoice/InvoicesPage'))
@@ -90,6 +90,7 @@ export default function App() {
         <Route element={<ClientShell />}>
           <Route index element={page(<DashboardPage />)} />
           <Route path="setup" element={page(<SetupPage />)} />
+          <Route path="details" element={page(<DetailsPage />)} />
           <Route path="approvals" element={page(<ApprovalsPage />)} />
           <Route path="deliverables/:id" element={page(<DeliverablePage />)} />
           <Route path="requests" element={page(<RequestsPage />)} />
@@ -119,8 +120,10 @@ export default function App() {
           <Route path="invoices" element={page(<InvoicesPage />)} />
           <Route path="invoices/:invoiceId" element={page(<InvoiceGeneratorPage />)} />
           <Route path="invoice" element={<OldInvoiceAddress />} />
-          <Route path="pipeline" element={page(<PipelinePage />)} />
-          <Route path="templates" element={page(<TemplatesPage />)} />
+          <Route path="client-management" element={page(<ClientManagementPage />)} />
+          {/* Pipeline and Templates were removed; old links land on the client list. */}
+          <Route path="pipeline" element={<Navigate to="/admin/clients" replace />} />
+          <Route path="templates" element={<Navigate to="/admin/clients" replace />} />
           <Route path="staff" element={page(<StaffPage />)} />
           <Route path="outbox" element={page(<OutboxPage />)} />
           <Route path="founder-inbox" element={page(<FounderInboxPage />)} />

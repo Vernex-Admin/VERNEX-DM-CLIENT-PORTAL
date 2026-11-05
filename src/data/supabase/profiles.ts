@@ -138,7 +138,7 @@ export const profiles: ProfilesRepo = {
     row<Profile>(
       supabase()
         .from('profiles')
-        .update(cleanPatch(patch, ['user_id']))
+        .update(cleanPatch(patch, ['user_id', 'login_code']))
         .eq('id', id)
         .select()
         .single(),

@@ -1,5 +1,5 @@
 import type { Agreement, AgreementEvent, AgreementTemplate } from '../../types/db'
-import { buildAgreementPdf } from '../../lib/agreementPdf'
+import { buildAgreementPdf, LETTERHEAD_URL } from '../../lib/agreementPdf'
 import { DataError } from '../types'
 import type { AgreementsRepo } from '../types'
 import { currentProfile, db, guard, newId, nowIso, run, visibleClientIds } from './store'
@@ -198,26 +198,30 @@ export const mockAgreements: AgreementsRepo = {
     })
   },
   async generateFinalPdf(id) {
-    const { bytes, clientName, clientSignature, clientSignedAt, clientTimeZone } = await run(() => {
+    const { input, clientName, clientSignature, clientSignedAt, clientTimeZone, founderSignedAt } = await run(() => {
       const agreement = readAgreement(id)
       if (agreement.status !== 'signed' || !agreement.signed_content) throw new DataError('forbidden', 'Only a signed agreement can be downloaded.')
       const founder = db.profiles.find((profile) => profile.id === agreement.founder_user_id)
       const clientUser = db.profiles.find((profile) => profile.id === agreement.client_user_id)
-      const bytes = buildAgreementPdf({
-        ...agreement,
-        founderName: founder?.full_name ?? 'Vernex Founder',
-        clientName: clientUser?.full_name ?? agreement.signed_content.clientName,
-      })
       return {
-        bytes,
+        input: {
+          ...agreement,
+          founderName: founder?.full_name ?? 'Vernex Founder',
+          clientName: clientUser?.full_name ?? agreement.signed_content.clientName,
+        },
+        founderSignedAt: agreement.founder_signed_at,
         clientName: agreement.signed_content.clientName || clientUser?.full_name || 'Client',
         clientSignature: bytesFromDataUrl(agreement.client_signature_url),
         clientSignedAt: agreement.client_signed_at,
         clientTimeZone: agreement.client_timezone,
       }
     })
+    const inBrowser = typeof window !== 'undefined'
+    // The letterhead is a public file; under test there is no server to fetch it from.
+    const letterhead = inBrowser ? await fetch(LETTERHEAD_URL).then(async (response) => (response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined)).catch(() => undefined) : undefined
+    const bytes = await buildAgreementPdf({ ...input, letterhead, trailingPages: inBrowser ? 1 : 0 })
     let finalBytes = bytes
-    if (typeof window !== 'undefined') {
+    if (inBrowser) {
       const response = await fetch('/vernex-agreement-closing-page.pdf')
       if (!response.ok) throw new DataError('invalid', 'The shared agreement closing page could not be loaded.')
       const { appendClosingPage } = await import('../../lib/agreementClosingPage')
@@ -227,6 +231,7 @@ export const mockAgreements: AgreementsRepo = {
         signature: clientSignature,
         signedAt: clientSignedAt,
         timeZone: clientTimeZone,
+        founderSignedAt,
       })
     }
     const link = dataUrl(finalBytes, 'application/pdf')

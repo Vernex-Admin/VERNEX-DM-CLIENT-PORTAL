@@ -3,11 +3,13 @@ import { Plus, Search, Users } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { ConfirmDialog } from '../../components/admin/ConfirmDialog'
 import { FormDrawer } from '../../components/admin/FormDrawer'
+import { PasswordInput } from '../../components/admin/LoginAccess'
 import { Icon } from '../../components/Icon'
 import { QueryError } from '../../components/QueryError'
 import { Button, EmptyState, Field, Input, Pill, Select, Skeleton, Table, useToast } from '../../components/ui'
 import type { Column } from '../../components/ui'
 import { clientHealth, slugify } from '../../lib/clientSummary'
+import { generatePassword, passwordError } from '../../lib/credentials'
 import { relativeTime } from '../../lib/dates'
 import { outstandingMinor } from '../../lib/invoices'
 import { HEALTH_STATUS } from '../../lib/labels'
@@ -17,7 +19,7 @@ import {
   useAccountLeads,
   useActivity,
   useClients,
-  useCreateClient,
+  useCreateClientWithLogin,
   useDeleteClient,
   useInvoices,
   useProjects,
@@ -26,6 +28,7 @@ import {
 import { useForm } from '../../lib/useForm'
 import { HEALTH_STATUSES } from '../../types/db'
 import type { Client, HealthStatus } from '../../types/db'
+import type { NewClientLoginState } from './client/ClientPage'
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'Something went wrong. Try again.')
 
@@ -72,7 +75,7 @@ export default function ClientsPage() {
   const shown = rows.filter(
     (row) =>
       (!query.trim() ||
-        `${row.client.name} ${row.client.industry ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) &&
+        `${row.client.name} ${row.client.client_code} ${row.client.industry ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) &&
       (!health || (health === 'none' ? row.health === null : row.health === health)) &&
       (!lead || row.leadId === lead),
   )
@@ -90,6 +93,7 @@ export default function ClientsPage() {
         </Link>
       ),
     },
+    { key: 'code', header: 'Client Code', mono: true, cell: ({ client }) => client.client_code },
     { key: 'industry', header: 'Industry', cell: ({ client }) => client.industry ?? '' },
     {
       key: 'health',
@@ -146,7 +150,7 @@ export default function ClientsPage() {
           <Icon icon={Search} size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-muted" />
           <Input
             aria-label="Search clients"
-            placeholder="Search by name or industry"
+            placeholder="Search by name, code or industry"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="pl-9"
@@ -258,8 +262,9 @@ export function DeleteClientDialog({ client, onClose, onDeleted }: { client: Cli
 function NewClientDrawer({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const navigate = useNavigate()
-  const create = useCreateClient()
+  const create = useCreateClientWithLogin()
   const canCreate = useCan('client', 'create')
+  const [initialPassword] = useState(generatePassword)
   const { values, set, dirty } = useForm({
     name: '',
     industry: '',
@@ -268,6 +273,9 @@ function NewClientDrawer({ onClose }: { onClose: () => void }) {
     billing_email: '',
     retainer: '',
     retainer_months: '',
+    contact_name: '',
+    contact_email: '',
+    password: initialPassword,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -275,25 +283,39 @@ function NewClientDrawer({ onClose }: { onClose: () => void }) {
     const next: Record<string, string> = {}
     if (values.name.trim().length < 2) next.name = 'Enter the client name.'
     if (values.billing_email && !/^\S+@\S+\.\S+$/.test(values.billing_email)) next.billing_email = 'Enter a valid email address.'
+    if (values.contact_email && !/^\S+@\S+\.\S+$/.test(values.contact_email)) next.contact_email = 'Enter a valid email address.'
     const retainer = values.retainer ? toMinor(values.retainer) : null
     if (retainer !== null && (Number.isNaN(retainer) || retainer < 0)) next.retainer = 'Enter an amount in rupees.'
     if (values.retainer_months && !/^[1-9]\d{0,2}$/.test(values.retainer_months)) next.retainer_months = 'Enter a number of months.'
+    const passwordProblem = passwordError(values.password)
+    if (passwordProblem) next.password = passwordProblem
     setErrors(next)
     if (Object.keys(next).length > 0 || !canCreate) return
     try {
-      const client = await create.mutateAsync({
-        name: values.name.trim(),
-        slug: slugify(values.name),
-        industry: values.industry.trim() || null,
-        city: values.city.trim() || null,
-        gstin: values.gstin.trim().toUpperCase() || null,
-        billing_email: values.billing_email.trim() || null,
-        retainer_minor: retainer,
-        retainer_months: values.retainer_months ? Number(values.retainer_months) : null,
+      const result = await create.mutateAsync({
+        client: {
+          name: values.name.trim(),
+          slug: slugify(values.name),
+          industry: values.industry.trim() || null,
+          city: values.city.trim() || null,
+          gstin: values.gstin.trim().toUpperCase() || null,
+          billing_email: values.billing_email.trim() || null,
+          retainer_minor: retainer,
+          retainer_months: values.retainer_months ? Number(values.retainer_months) : null,
+        },
+        contact: {
+          full_name: values.contact_name.trim() || values.name.trim(),
+          email: values.contact_email.trim().toLowerCase() || null,
+        },
+        password: values.password,
       })
-      toast({ title: `${client.name} created`, tone: 'ok' })
+      toast({ title: `${result.client.name} created`, description: result.client.client_code ? `Client Code ${result.client.client_code}` : undefined, tone: 'ok' })
       onClose()
-      navigate(`/admin/clients/${client.id}`)
+      const state: NewClientLoginState = {
+        issued: result.credential ? { loginCode: result.credential.login_code, password: result.credential.password } : null,
+        loginError: result.loginError,
+      }
+      navigate(`/admin/clients/${result.client.id}?tab=login`, { state })
     } catch (error) {
       toast({ title: 'Could not create the client', description: messageOf(error), tone: 'bad' })
     }
@@ -304,7 +326,7 @@ function NewClientDrawer({ onClose }: { onClose: () => void }) {
       open
       onClose={onClose}
       title="New client"
-      description="You can add people, projects and invoices once it exists."
+      description="The system gives the client a unique Client Code (like VXC-1001). They sign in with it and the password below."
       dirty={dirty}
       onSubmit={submit}
       submitLabel="Create client"
@@ -334,6 +356,17 @@ function NewClientDrawer({ onClose }: { onClose: () => void }) {
           <Input inputMode="numeric" value={values.retainer_months} onChange={(event) => set('retainer_months', event.target.value)} />
         </Field>
       </div>
+
+      <fieldset className="flex flex-col gap-4 border-t border-rule pt-4">
+        <legend className="pr-2 text-[1.0667rem] text-ink">Portal login</legend>
+        <Field label="Contact person" hint="Who signs in with the Client Code. Leave blank to use the client name.">
+          <Input value={values.contact_name} onChange={(event) => set('contact_name', event.target.value)} autoComplete="off" />
+        </Field>
+        <Field label="Contact email" hint="Optional. Clients always sign in with the Client Code, never with this email." error={errors.contact_email}>
+          <Input type="email" value={values.contact_email} onChange={(event) => set('contact_email', event.target.value)} autoComplete="off" />
+        </Field>
+        <PasswordInput value={values.password} onChange={(next) => set('password', next)} error={errors.password} />
+      </fieldset>
     </FormDrawer>
   )
 }

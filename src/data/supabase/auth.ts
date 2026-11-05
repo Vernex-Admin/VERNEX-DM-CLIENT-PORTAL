@@ -4,6 +4,7 @@ import type { Profile } from '../../types/db'
 import { DataError } from '../types'
 import type { AuthRepo, AuthSession, SessionRepo } from '../types'
 import { supabase } from './client'
+import { invokeFunction } from './edge'
 import { toDataError } from './errors'
 
 const callbackUrl = () => `${window.location.origin}/auth/callback`
@@ -37,21 +38,19 @@ export const supabaseAuth: AuthRepo = {
     }
     if (!password) throw new DataError('invalid', 'Enter your password.')
 
-    const { data, error } = await supabase().functions.invoke('login-with-identifier', {
-      body: { identifier: isEmail ? value.toLowerCase() : value.toUpperCase(), password },
-    })
-    let serverMessage: string | undefined
-    if (error?.context instanceof Response) {
-      try {
-        const body = await error.context.json() as { error?: unknown }
-        if (typeof body.error === 'string') serverMessage = body.error
-      } catch {
-        // Use the generic message when the Edge Function response isn't JSON.
-      }
+    const fallback = 'Invalid Client Code or password. Try again.'
+    let data: { access_token?: string; refresh_token?: string } | null
+    try {
+      data = await invokeFunction<{ access_token?: string; refresh_token?: string } | null>(
+        'login-with-identifier',
+        { identifier: isEmail ? value.toLowerCase() : value.toUpperCase(), password },
+        fallback,
+      )
+    } catch (error) {
+      // Signing in has no session to lose, so every refusal reads as a sign-in problem.
+      throw new DataError('invalid', error instanceof DataError ? error.message : fallback)
     }
-    if (error || !data?.access_token || !data?.refresh_token) {
-      throw new DataError('invalid', serverMessage || 'Invalid identifier or password. Try again.')
-    }
+    if (!data?.access_token || !data?.refresh_token) throw new DataError('invalid', fallback)
 
     const { data: sessionData, error: sessionError } = await supabase().auth.setSession({
       access_token: data.access_token,

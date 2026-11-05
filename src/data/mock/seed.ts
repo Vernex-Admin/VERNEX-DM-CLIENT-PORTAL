@@ -3,6 +3,7 @@ import type {
   AiDraft,
   Client,
   ClientAssignment,
+  ClientCredential,
   Comment,
   Deliverable,
   DeliverableVersion,
@@ -79,6 +80,27 @@ function clients(): Client[] {
       retainer_months: 6,
       service_type: 'both',
       onboarding_answers: null,
+      client_code: 'VXC-1001',
+      detail_fields: null,
+      details: {
+        legal_name: 'AGK Fitness Private Limited',
+        brand_name: 'AGK Fitness',
+        business_type: 'Private Limited',
+        industry: 'Fitness',
+        contact_name: 'Arun Kumar',
+        contact_phone: '+919000000011',
+        contact_email: 'arun@agkfitness.example',
+        address: '12 Gym Street, Anna Nagar',
+        city: 'Chennai',
+        state: 'Tamil Nadu',
+        pincode: '600040',
+        gstin: '33AAAAA0000A1Z5',
+        billing_email: 'accounts@agkfitness.example',
+        instagram: '@agkfitness',
+      },
+      details_submitted_at: at(-2),
+      details_locked_at: null,
+      details_locked_by: null,
       created_at: at(-75),
     },
     {
@@ -95,6 +117,12 @@ function clients(): Client[] {
       retainer_months: 3,
       service_type: null,
       onboarding_answers: null,
+      client_code: 'VXC-1002',
+      detail_fields: null,
+      details: null,
+      details_submitted_at: null,
+      details_locked_at: null,
+      details_locked_by: null,
       created_at: at(-48),
     },
   ]
@@ -109,6 +137,7 @@ function profiles(): Profile[] {
     client_id: string | null,
     phone: string,
     can_approve = false,
+    login_code: string | null = null,
   ): Profile => ({
     id,
     client_id,
@@ -120,18 +149,43 @@ function profiles(): Profile[] {
     can_approve,
     is_active: true,
     notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
+    login_code,
     created_at: at(-75),
   })
 
   return [
     person(founder, 'Boss Anandaa', 'admin@vernex.in', 'vernex_founder', null, '+919789912805'),
     person(pm, 'Karthik Raj', 'karthik@vernex.example', 'vernex_pm', null, '+919000000002'),
-    person(agkAdmin, 'Arun Kumar', 'arun@agkfitness.example', 'client_admin', agk, '+919000000011', true),
+    person(agkAdmin, 'Arun Kumar', 'arun@agkfitness.example', 'client_admin', agk, '+919000000011', true, 'VXC-1001'),
     // Cannot approve: use this profile to test the can_approve rule.
-    person(agkMember, 'Divya Shankar', 'divya@agkfitness.example', 'client_member', agk, '+919000000012', false),
-    person(raackAdmin, 'Meena Raghavan', 'meena@raackdance.example', 'client_admin', raack, '+919000000021', true),
+    person(agkMember, 'Divya Shankar', 'divya@agkfitness.example', 'client_member', agk, '+919000000012', false, 'VXC-1001-2'),
+    person(raackAdmin, 'Meena Raghavan', 'meena@raackdance.example', 'client_admin', raack, '+919000000021', true, 'VXC-1002'),
     // Can approve: the client admin has switched it on.
     person(raackMember, 'Sanjay Ravi', 'sanjay@raackdance.example', 'client_member', raack, '+919000000022', true),
+  ]
+}
+
+/** Mock passwords for the seeded client logins. In Supabase, staff issue these from Client Management. */
+export const SEED_PASSWORDS = {
+  agkAdmin: 'Agkfit-2026',
+  agkMember: 'Divya-2026',
+  raackAdmin: 'Raack-2026',
+} as const
+
+function clientCredentials(): ClientCredential[] {
+  const login = (profile_id: string, client_id: string, login_code: string, password: string): ClientCredential => ({
+    profile_id,
+    client_id,
+    login_code,
+    password,
+    set_by: 'vernex',
+    updated_at: at(-40),
+  })
+  // Sanjay (Raack) has no login yet: use him to try "Set up login".
+  return [
+    login(agkAdmin, agk, 'VXC-1001', SEED_PASSWORDS.agkAdmin),
+    login(agkMember, agk, 'VXC-1001-2', SEED_PASSWORDS.agkMember),
+    login(raackAdmin, raack, 'VXC-1002', SEED_PASSWORDS.raackAdmin),
   ]
 }
 
@@ -1160,6 +1214,7 @@ export function createSeed(): MockDatabase {
   return {
     clients: clients(),
     profiles: profiles(),
+    client_credentials: clientCredentials(),
     client_assignments: clientAssignments(),
     projects: projects(),
     milestones: milestones(),

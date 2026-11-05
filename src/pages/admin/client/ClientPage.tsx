@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { ArrowLeft, Eye, FileCheck, Receipt } from 'lucide-react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import { CredentialsSummary } from '../../../components/admin/LoginAccess'
 import { InlineField } from '../../../components/admin/InlineField'
 import { Icon } from '../../../components/Icon'
 import { QueryError } from '../../../components/QueryError'
-import { Button, Card, CardBody, CardHeader, EmptyState, Skeleton, Tabs, useToast } from '../../../components/ui'
+import { Button, Card, CardBody, CardHeader, Dialog, EmptyState, Pill, Skeleton, Tabs, useToast } from '../../../components/ui'
 import { formatDate } from '../../../lib/dates'
 import { formatINR, toMinor, toRupeesInput } from '../../../lib/money'
 import { useCan } from '../../../lib/permissions'
@@ -12,15 +13,17 @@ import { useClient, useUpdateClient } from '../../../lib/queries'
 import type { Client, Update } from '../../../types/db'
 import { DeleteClientDialog } from '../ClientsPage'
 import { DeliverablesTab } from './DeliverablesTab'
+import { DetailsTab } from './DetailsTab'
 import { DocumentsTab } from './DocumentsTab'
 import { InvoicesTab } from './InvoicesTab'
+import { LoginTab } from './LoginTab'
 import { OnboardingTab } from './OnboardingTab'
 import { PerformanceTab } from './PerformanceTab'
 import { ProjectsTab } from './ProjectsTab'
 import { RequestsTab } from './RequestsTab'
 import { TeamTab } from './TeamTab'
 
-const TAB_IDS = ['onboarding', 'overview', 'documents', 'team', 'projects', 'deliverables', 'requests', 'invoices', 'performance'] as const
+const TAB_IDS = ['onboarding', 'overview', 'details', 'login', 'documents', 'team', 'projects', 'deliverables', 'requests', 'invoices', 'performance'] as const
 type TabId = (typeof TAB_IDS)[number]
 
 export default function ClientPage() {
@@ -67,7 +70,10 @@ export default function ClientPage() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-[1.4rem] leading-tight">{data.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[1.4rem] leading-tight">{data.name}</h1>
+              {data.client_code && <Pill tone="neutral"><span className="font-mono">{data.client_code}</span></Pill>}
+            </div>
             <p className="text-ink-muted">{[data.industry, data.city].filter(Boolean).join(' · ')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -105,6 +111,8 @@ export default function ClientPage() {
         items={[
           { id: 'onboarding', label: 'Onboarding', content: <OnboardingTab clientId={data.id} /> },
           { id: 'overview', label: 'Overview', content: <Overview client={data} /> },
+          { id: 'details', label: 'Details', content: <DetailsTab clientId={data.id} /> },
+          { id: 'login', label: 'Login', content: <LoginTab clientId={data.id} /> },
           { id: 'documents', label: 'Documents', content: <DocumentsTab clientId={data.id} /> },
           { id: 'team', label: 'Team', content: <TeamTab clientId={data.id} /> },
           { id: 'projects', label: 'Projects', content: <ProjectsTab clientId={data.id} /> },
@@ -114,6 +122,7 @@ export default function ClientPage() {
           { id: 'performance', label: 'Performance', content: <PerformanceTab clientId={data.id} /> },
         ]}
       />
+      <NewClientLogin />
     </div>
   )
 }
@@ -198,5 +207,37 @@ function Overview({ client }: { client: Client }) {
         onDeleted={() => navigate('/admin/clients')}
       />
     </div>
+  )
+}
+
+export type NewClientLoginState = { issued: { loginCode: string; password: string } | null; loginError: string | null }
+
+/** Right after New client: the sign-in details to pass on, or why the login could not be set up. */
+function NewClientLogin() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const state = (location.state as Partial<NewClientLoginState> | null) ?? {}
+  const open = Boolean(state.issued || state.loginError)
+  // Dropping the state keeps the password out of the history entry.
+  const close = () => navigate({ search: location.search }, { replace: true, state: null })
+
+  return (
+    <Dialog
+      open={open}
+      onClose={close}
+      title={state.issued ? 'Client created: share these sign-in details' : 'Client created without a login'}
+      description={
+        state.issued
+          ? 'The client signs in with this Client Code and password. You can see the password again under Login.'
+          : (state.loginError ?? undefined)
+      }
+      footer={
+        <Button variant="primary" onClick={close}>
+          {state.issued ? 'Done' : 'Set it up from the Login tab'}
+        </Button>
+      }
+    >
+      {state.issued ? <CredentialsSummary loginCode={state.issued.loginCode} password={state.issued.password} /> : <span />}
+    </Dialog>
   )
 }

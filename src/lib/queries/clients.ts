@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
 import type { MyProfilePatch } from '../../data'
 import type { Client, ClientAssignment, ClientInsert, NotificationPrefs, Profile, ProfileInsert, Update } from '../../types/db'
@@ -43,7 +43,14 @@ export function useCreateClient() {
         retainer_months: null,
         service_type: input.service_type ?? null,
         onboarding_answers: input.onboarding_answers ?? null,
+        detail_fields: null,
+        details: null,
+        details_submitted_at: null,
+        details_locked_at: null,
+        details_locked_by: null,
         ...input,
+        // Shown until the server answers with the real code.
+        client_code: '',
         id: tempId(),
         created_at: nowIso(),
       },
@@ -76,6 +83,22 @@ export function useClientUsers(clientId: string | undefined) {
     queryKey: keys.list(R.clientUsers, { client_id: clientId }),
     queryFn: () => data.profiles.listByClient(clientId as string),
     enabled: Boolean(clientId),
+  })
+}
+
+/** The people of several clients at once, sharing the cache with useClientUsers. */
+export function useClientUsersOf(clientIds: string[]) {
+  return useQueries({
+    queries: clientIds.map((clientId) => ({
+      queryKey: keys.list(R.clientUsers, { client_id: clientId }),
+      queryFn: () => data.profiles.listByClient(clientId),
+    })),
+    combine: (results) => ({
+      data: results.flatMap((result) => result.data ?? []),
+      isPending: results.some((result) => result.isPending),
+      error: results.find((result) => result.isError)?.error ?? null,
+      refetch: () => Promise.all(results.map((result) => result.refetch())),
+    }),
   })
 }
 
@@ -133,6 +156,7 @@ export function useCreateClientUser() {
         is_active: true,
         ...input,
         notification_prefs: input.notification_prefs ?? DEFAULT_PREFS,
+        login_code: null,
         id: tempId(),
         created_at: nowIso(),
       },
