@@ -37,7 +37,7 @@ Deno.serve(async (request) => {
 
   const { data: profile } = await admin.from('profiles').select('id,user_id,role,client_id,full_name')
     .eq('user_id', authData.user.id).eq('is_active', true).maybeSingle()
-  let allowed = profile?.role === 'vernex_founder'
+  let allowed = profile?.role === 'vernex_founder' || profile?.role === 'vernex_finance'
     || (profile?.client_id === agreement.client_id && (profile?.role === 'client_admin' || profile?.role === 'client_member'))
   if (profile?.role === 'vernex_pm') {
     const { data: assignment } = await admin.from('client_assignments').select('client_id')

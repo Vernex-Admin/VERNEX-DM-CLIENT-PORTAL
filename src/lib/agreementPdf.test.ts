@@ -47,6 +47,20 @@ describe('A4 agreement PDF', () => {
     expect(onLetterhead.getPages().every(isA4)).toBe(true)
   })
 
+  it('embeds a custom uploaded logo and accepts a removed tagline', async () => {
+    const [letterhead, logo] = await Promise.all([
+      readFile('public/templates/AGREEMENT_TEMPLATE.pdf'),
+      readFile('public/vernex-logo.jpg'),
+    ])
+    const branded = {
+      ...content,
+      logoUrl: `data:image/jpeg;base64,${logo.toString('base64')}`,
+      tagline: '',
+    }
+    const pdf = await buildAgreementPdf({ ...signed, signed_content: branded, letterhead })
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1)
+  })
+
   it('appends the fixed closing page last, untouched until the client signs', async () => {
     const [body, template, clientSignature] = await Promise.all([
       buildAgreementPdf({ ...signed, signed_content: longContent, trailingPages: 1 }),

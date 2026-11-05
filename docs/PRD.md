@@ -40,36 +40,40 @@
 
 ### 1.3 Roles & Permissions (RBAC)
 
-Roles: `client_admin`, `client_member`, `vernex_pm`, `vernex_tech_lead`, `vernex_creative_lead`, plus `vernex_founder` (super-admin, needed for Direct-to-Founder inbox) and `vernex_finance` (optional later).
+Roles: `client_admin`, `client_member`, `vernex_pm`, `vernex_tech_lead`, `vernex_creative_lead`, plus `vernex_founder` (super-admin, needed for Direct-to-Founder inbox) and `vernex_finance` (agreements and invoices only; read-only client/project details needed for those workflows).
 
 Legend: **C**reate, **R**ead, **U**pdate, **D**elete, **A**pprove, – none. "Own" = own records only. "Assigned" = assigned clients/projects only.
 
-| Capability | Client Admin | Client Member | Vernex PM | Tech Lead | Creative Lead |
-| --- | --- | --- | --- | --- | --- |
-| View dashboard (own org) | R | R | R (assigned) | R (assigned) | R (assigned) |
-| Approve / request revision on deliverables | A | A (if `can_approve` flag) | – (can record offline approval with proof) | – | – |
-| Submit new service / change request | C | C | C on behalf | C (tech) | C (creative) |
-| Create / edit projects, milestones | – | – | CRUD | CRUD (tech projects) | CRUD (creative projects) |
-| Create / move tasks & sprint board | R | R | CRUD | CRUD | CRUD |
-| Upload deliverables | C (assets only) | C (assets only) | CRU | CRU (builds) | CRU (media) |
-| Delete files | D (own uploads) | – | D | D (builds) | D (media) |
-| Vault: Source code / API vault | R (after final payment gate) | – | R | CRUD | – |
-| Video reviewer comments | C | C | CRU | – | CRU |
-| Internal notes / internal tasks | – | – | CRUD | CRUD | CRUD |
-| Invoices: view / pay | R, Pay | – (configurable) | R | – | – |
-| Invoices: create / edit | – | – | C (draft), submit to finance | – | – |
-| Manage client users, invite, SSO | CRUD | – | CRU (invite client admin) | – | – |
-| Revision limit overrides | – | – | U (with reason, logged) | – | – |
-| Ad accounts / integrations | R | R | CRU | – | CRU (ads) |
-| Upsell cards | R, dismiss | R | Configure | – | – |
-| Direct-to-Founder box | C, R own threads | C, R own threads | – (sees nothing unless escalated) | – | – |
-| Founder inbox | – | – | – | – | – (founder only) |
-| Global analytics (all clients) | – | – | R (assigned) | – | – |
+| Capability | Client Admin | Client Member | Vernex PM | Tech Lead | Creative Lead | Finance Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| View dashboard (own org) | R | R | R (assigned) | R (assigned) | R (assigned) | – |
+| Approve / request revision on deliverables | A | A (if `can_approve` flag) | – (can record offline approval with proof) | – | – | – |
+| Submit new service / change request | C | C | C on behalf | C (tech) | C (creative) | – |
+| Create / edit projects, milestones | – | – | CRUD | CRUD (tech projects) | CRUD (creative projects) | – |
+| Create / move tasks & sprint board | R | R | CRUD | CRUD | CRUD | – |
+| Upload deliverables | C (assets only) | C (assets only) | CRU | CRU (builds) | CRU (media) | – |
+| Delete files | D (own uploads) | – | D | D (builds) | D (media) | – |
+| Vault: Source code / API vault | R (after final payment gate) | – | R | CRUD | – | – |
+| Video reviewer comments | C | C | CRU | – | CRU | – |
+| Internal notes / internal tasks | – | – | CRUD | CRUD | CRUD | – |
+| Invoices: view / pay | R, Pay | – (configurable) | R | – | – | R, manage payments |
+| Invoices: create / edit | – | – | C (draft), submit to finance | – | – | CRUD |
+| Agreements: prepare / edit | – | – | CRUD | – | – | CRUD |
+| Agreements: approve / send | – | – | – | – | – | – (founder only) |
+| Invoice settings and templates | – | – | CRUD | – | – | CRUD |
+| Manage client users, invite, SSO | CRUD | – | CRU (invite client admin) | – | – | – |
+| Revision limit overrides | – | – | U (with reason, logged) | – | – | – |
+| Ad accounts / integrations | R | R | CRU | – | CRU (ads) | – |
+| Upsell cards | R, dismiss | R | Configure | – | – | – |
+| Direct-to-Founder box | C, R own threads | C, R own threads | – (sees nothing unless escalated) | – | – | – |
+| Founder inbox | – | – | – | – | – (founder only) | – |
+| Global analytics (all clients) | – | – | R (assigned) | – | – | – |
 
 Rules the backend must enforce:
 
 - `client_member` can approve only if `users.can_approve = true` (set by Client Admin).
 - Any user whose role begins with `vernex_` sees only clients in `client_assignments`; founder sees all.
+- `vernex_finance` can read client/project details only to prepare agreements and invoices, and cannot manage clients or other client work.
 - Approvals by Vernex staff on a client's behalf require an attached proof (screenshot of WhatsApp / email) and are tagged `approved_via = 'offline_proxy'`.
 - Permissions are expressed as a policy map (`resource:action`) in code, not scattered `if role ==` checks.
 

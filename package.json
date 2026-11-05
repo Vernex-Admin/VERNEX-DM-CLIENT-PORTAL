@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "setup:admin": "node scripts/setup-admin.mjs"
+    "setup:admin": "node scripts/setup-admin.mjs",
+    "setup:finance-admin": "node scripts/setup-finance-admin.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

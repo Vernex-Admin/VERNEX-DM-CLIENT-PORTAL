@@ -51,6 +51,7 @@ const at = (offset: number) => new Date(now + offset * DAY_MS).toISOString()
 
 export const SEED_IDS = {
   founder: 'u-founder',
+  gentechAdmin: 'u-gentech-admin',
   pm: 'u-pm',
   agk: 'c-agk',
   agkAdmin: 'u-agk-admin',
@@ -60,7 +61,7 @@ export const SEED_IDS = {
   raackMember: 'u-raack-member',
 } as const
 
-const { founder, pm, agk, agkAdmin, agkMember, raack, raackAdmin, raackMember } = SEED_IDS
+const { founder, gentechAdmin, pm, agk, agkAdmin, agkMember, raack, raackAdmin, raackMember } = SEED_IDS
 
 const rupees = (amount: number) => amount * 100
 
@@ -155,6 +156,7 @@ function profiles(): Profile[] {
 
   return [
     person(founder, 'Boss Anandaa', 'admin@vernex.in', 'vernex_founder', null, '+919789912805'),
+    person(gentechAdmin, 'Vernex Gentech Admin', 'admin@vernexgentech.in', 'vernex_finance', null, '+919789912806'),
     person(pm, 'Karthik Raj', 'karthik@vernex.example', 'vernex_pm', null, '+919000000002'),
     person(agkAdmin, 'Arun Kumar', 'arun@agkfitness.example', 'client_admin', agk, '+919000000011', true, 'VXC-1001'),
     // Cannot approve: use this profile to test the can_approve rule.

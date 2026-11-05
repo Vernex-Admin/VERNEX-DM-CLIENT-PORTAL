@@ -19,10 +19,10 @@ export type Minor = number
 // Enums
 // ---------------------------------------------------------------------------
 
-export const USER_ROLES = ['vernex_founder', 'vernex_pm', 'client_admin', 'client_member'] as const
+export const USER_ROLES = ['vernex_founder', 'vernex_pm', 'vernex_finance', 'client_admin', 'client_member'] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
-export const STAFF_ROLES = ['vernex_founder', 'vernex_pm'] as const satisfies readonly UserRole[]
+export const STAFF_ROLES = ['vernex_founder', 'vernex_pm', 'vernex_finance'] as const satisfies readonly UserRole[]
 export const CLIENT_ROLES = ['client_admin', 'client_member'] as const satisfies readonly UserRole[]
 export type StaffRole = (typeof STAFF_ROLES)[number]
 export type ClientRole = (typeof CLIENT_ROLES)[number]

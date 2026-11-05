@@ -14,8 +14,8 @@ const DEFAULT_PREFS: NotificationPrefs = {
   weekly_report: false,
 }
 
-export function useClients() {
-  return useQuery({ queryKey: keys.list(R.clients), queryFn: () => data.clients.list() })
+export function useClients(enabled = true) {
+  return useQuery({ queryKey: keys.list(R.clients), queryFn: () => data.clients.list(), enabled })
 }
 
 export function useClient(id: string | undefined) {

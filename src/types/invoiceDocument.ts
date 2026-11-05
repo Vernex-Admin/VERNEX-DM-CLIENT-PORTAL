@@ -84,6 +84,8 @@ export type InvoiceFooter = {
 
 export type InvoiceDocument = {
   version: 1
+  title?: string
+  subtitle?: string
   company: InvoiceCompany
   bill_to: InvoiceBillTo
   project: InvoiceProjectDetails
@@ -104,6 +106,8 @@ export type PaymentMode = 'mock' | 'gateway'
 
 /** Company-wide defaults every new invoice starts from. */
 export type InvoiceDefaults = {
+  title?: string
+  subtitle?: string
   company: InvoiceCompany
   footer: InvoiceFooter
   payment: InvoicePaymentBlock

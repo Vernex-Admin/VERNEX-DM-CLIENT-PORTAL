@@ -14,6 +14,7 @@ export type Resource =
   | 'service_request'
   | 'invoice'
   | 'invoice_settings'
+  | 'agreement'
   | 'action_item'
   | 'brand_asset'
   | 'comment'
@@ -63,6 +64,7 @@ const STAFF: readonly Permission[] = [
   ...crud('milestone'),
   ...crud('deliverable'),
   ...crud('invoice'),
+  ...crud('agreement'),
   // Company defaults, payment mode and invoice images for the Invoice Generator.
   'invoice_settings:view',
   'invoice_settings:edit',
@@ -129,9 +131,19 @@ const CLIENT: readonly Permission[] = [
 ]
 
 export const POLICY: Record<UserRole, readonly Permission[]> = {
-  // Only the founder reads the Founder Box and deletes clients; the PM sees none of it.
-  vernex_founder: [...STAFF, 'client:delete', ...crud('staff'), 'staff:view', 'founder_inbox:view', 'founder_inbox:edit'],
+  // Only the founder reads the Founder Box, approves agreements and deletes clients; the PM sees none of it.
+  vernex_founder: [...STAFF, 'agreement:approve', 'client:delete', ...crud('staff'), 'staff:view', 'founder_inbox:view', 'founder_inbox:edit'],
   vernex_pm: STAFF,
+  // Finance & Agreements admin: may read clients only to link agreements and invoices.
+  vernex_finance: [
+    'client:view',
+    'project:view',
+    ...crud('invoice'),
+    'invoice_settings:view',
+    'invoice_settings:edit',
+    ...crud('agreement'),
+    ...crud('template'),
+  ],
   client_admin: CLIENT,
   client_member: CLIENT,
 }
@@ -158,7 +170,7 @@ export function can(
   ctx: PermissionContext = {},
 ): boolean {
   if (!profile || !profile.is_active) return false
-  if (!POLICY[profile.role].includes(`${resource}:${action}`)) return false
+  if (!POLICY[profile.role]?.includes(`${resource}:${action}`)) return false
 
   const isClientUser = profile.role === 'client_admin' || profile.role === 'client_member'
   if (isClientUser && ctx.clientId !== undefined && ctx.clientId !== profile.client_id) return false
@@ -174,7 +186,7 @@ export type Audience = 'staff' | 'client'
 
 export function audienceOf(profile: Profile | null | undefined): Audience | null {
   if (!profile || !profile.is_active) return null
-  return profile.role === 'vernex_founder' || profile.role === 'vernex_pm' ? 'staff' : 'client'
+  return profile.role === 'vernex_founder' || profile.role === 'vernex_pm' || profile.role === 'vernex_finance' ? 'staff' : 'client'
 }
 
 /** `can()` for the signed-in user. False while the session is loading. */

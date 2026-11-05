@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import type { PDFFont, PDFPage, PDFEmbeddedPage } from 'pdf-lib'
+import type { PDFFont, PDFPage, PDFEmbeddedPage, PDFImage } from 'pdf-lib'
 import type { Agreement } from '../types/db'
 import type { AgreementContent } from '../types/agreement'
 
@@ -97,6 +97,12 @@ function wrap(value: string, font: PDFFont, size: number, width: number): Line[]
 
 type Align = 'left' | 'center' | 'right' | 'justify'
 
+type AgreementBranding = {
+  customLogoImage?: PDFImage | null
+  removeLogo?: boolean
+  customTagline?: string | null
+}
+
 class Writer {
   pages: PDFPage[] = []
   page!: PDFPage
@@ -106,15 +112,60 @@ class Writer {
     private readonly document: PDFDocument,
     private readonly fonts: Fonts,
     private readonly letterhead: PDFEmbeddedPage | null,
+    private readonly branding?: AgreementBranding,
   ) {
     this.newPage()
   }
 
   newPage() {
     this.page = this.document.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-    if (this.letterhead) this.page.drawPage(this.letterhead, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
+    if (this.letterhead) {
+      this.page.drawPage(this.letterhead, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
+      this.applyLetterheadBranding()
+    }
     this.pages.push(this.page)
     this.y = CONTENT_TOP
+  }
+
+  private applyLetterheadBranding() {
+    if (!this.branding) return
+    const BG_GREY = rgb(230 / 255, 231 / 255, 230 / 255)
+
+    // Handle logo override or removal
+    if (this.branding.removeLogo || this.branding.customLogoImage) {
+      // Cover default logo area on the template
+      this.page.drawRectangle({ x: 30, y: 765, width: 230, height: 72, color: BG_GREY })
+      if (this.branding.customLogoImage) {
+        const img = this.branding.customLogoImage
+        const maxW = 180
+        const maxH = 55
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1)
+        const imgW = img.width * scale
+        const imgH = img.height * scale
+        const imgX = 45
+        const imgY = 770 + (maxH - imgH) / 2
+        this.page.drawImage(img, { x: imgX, y: imgY, width: imgW, height: imgH })
+      }
+    }
+
+    // Handle tagline override or removal
+    if (this.branding.customTagline !== undefined && this.branding.customTagline !== null) {
+      const trimmed = this.branding.customTagline.trim()
+      if (trimmed !== 'Crafting your digital narrative.') {
+        this.page.drawRectangle({ x: 30, y: 744, width: 230, height: 20, color: BG_GREY })
+        if (trimmed) {
+          const font = this.fonts.bold
+          const tagText = printable(trimmed, font)
+          this.page.drawText(tagText, {
+            x: 48,
+            y: 750,
+            size: 9.5,
+            font,
+            color: rgb(0.1, 0.1, 0.1),
+          })
+        }
+      }
+    }
   }
 
   /** Starts a new page unless `height` more points fit on this one. */
@@ -184,7 +235,40 @@ export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8
     const [embedded] = await document.embedPdf(input.letterhead, [0])
     letterhead = embedded ?? null
   }
-  const w = new Writer(document, fonts, letterhead)
+
+  let customLogoImage: PDFImage | null = null
+  let removeLogo = false
+  if (content.logoUrl !== undefined && content.logoUrl !== null) {
+    if (content.logoUrl.trim() === '') {
+      removeLogo = true
+    } else {
+      let mime: string
+      let bytes: Uint8Array
+      if (content.logoUrl.startsWith('data:')) {
+        const separator = content.logoUrl.indexOf(',')
+        if (separator < 0) throw new Error('The custom logo data is invalid.')
+        mime = content.logoUrl.slice(5, content.logoUrl.indexOf(';')).toLowerCase()
+        const binary = atob(content.logoUrl.slice(separator + 1))
+        bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+      } else {
+        const response = await fetch(content.logoUrl)
+        if (!response.ok) throw new Error('The custom logo could not be loaded.')
+        mime = (response.headers.get('content-type') ?? '').split(';')[0]?.toLowerCase() ?? ''
+        bytes = new Uint8Array(await response.arrayBuffer())
+      }
+      if (mime === 'image/png') customLogoImage = await document.embedPng(bytes)
+      else if (mime === 'image/jpeg' || mime === 'image/jpg') customLogoImage = await document.embedJpg(bytes)
+      else throw new Error('Agreement logos must be PNG or JPEG images.')
+    }
+  }
+
+  const branding: AgreementBranding = {
+    customLogoImage,
+    removeLogo,
+    customTagline: content.tagline !== undefined ? content.tagline : null,
+  }
+
+  const w = new Writer(document, fonts, letterhead, branding)
   const fill = (body: string) =>
     body
       .replace(/{{projectTitle}}/g, content.projectTitle)

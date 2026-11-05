@@ -3,7 +3,8 @@
 --
 -- Rules, matching CLAUDE.md and src/lib/permissions.ts:
 --   * vernex_founder sees every client. vernex_pm sees only clients in client_assignments.
---   * Staff create, edit and delete clients, users, projects, milestones, deliverables, invoices.
+--     vernex_finance reads client/project details only for agreements and invoices.
+--   * Founder and PM manage client work; finance manages only agreements and invoices.
 --   * Client users see only their own client, and never internal items, drafts, leads or other clients.
 --   * Clients may: comment, upload Brand Assets, submit service requests, use the Founder Box.
 --     Approving and requesting revisions go through functions in 03_functions.sql.
@@ -32,10 +33,32 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select coalesce(public.current_user_role() in ('vernex_founder', 'vernex_pm'), false)
 $$;
 
+create or replace function public.is_finance_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce(public.current_user_role() = 'vernex_finance', false)
+$$;
+
+create or replace function public.is_invoice_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.is_staff() or public.is_finance_admin()
+$$;
+
+create or replace function public.is_agreement_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.is_staff() or public.is_finance_admin()
+$$;
+
 create or replace function public.is_founder()
 returns boolean language sql stable security definer set search_path = '' as $$
   select coalesce(public.current_user_role() = 'vernex_founder', false)
 $$;
+
+revoke all on function public.is_finance_admin() from public, anon;
+revoke all on function public.is_invoice_admin() from public, anon;
+revoke all on function public.is_agreement_admin() from public, anon;
+grant execute on function public.is_finance_admin() to authenticated;
+grant execute on function public.is_invoice_admin() to authenticated;
+grant execute on function public.is_agreement_admin() to authenticated;
 
 create or replace function public.my_client_ids()
 returns setof uuid language sql stable security definer set search_path = '' as $$
@@ -51,6 +74,15 @@ returns setof uuid language sql stable security definer set search_path = '' as 
   -- The founder: everyone.
   select c.id from public.clients c where public.is_founder()
 $$;
+
+create or replace function public.financial_client_ids()
+returns setof uuid language sql stable security definer set search_path = '' as $$
+  select ids.client_id from public.my_client_ids() as ids(client_id)
+  union
+  select c.id from public.clients c where public.is_finance_admin()
+$$;
+revoke all on function public.financial_client_ids() from public, anon;
+grant execute on function public.financial_client_ids() to authenticated;
 
 -- Can the signed-in user approve or request changes for their client?
 create or replace function public.can_approve_work()
@@ -155,6 +187,8 @@ alter table public.message_templates         enable row level security;
 -- so a PM is assigned to what they create.)
 create policy clients_read on public.clients for select to authenticated
   using (id in (select public.my_client_ids()));
+create policy clients_finance_read on public.clients for select to authenticated
+  using (public.is_finance_admin());
 create policy clients_staff_update on public.clients for update to authenticated
   using (public.is_staff() and id in (select public.my_client_ids()))
   with check (public.is_staff());
@@ -195,6 +229,8 @@ create policy assignments_staff_write on public.client_assignments for all to au
 -- projects, milestones, social_metrics_daily, social_posts
 create policy projects_read on public.projects for select to authenticated
   using (client_id in (select public.my_client_ids()));
+create policy projects_finance_read on public.projects for select to authenticated
+  using (public.is_finance_admin());
 create policy projects_staff_write on public.projects for all to authenticated
   using (public.is_staff() and client_id in (select public.my_client_ids()))
   with check (public.is_staff() and client_id in (select public.my_client_ids()));
@@ -288,16 +324,16 @@ create policy requests_staff_delete on public.service_requests for delete to aut
 
 -- invoices: clients never see drafts.
 create policy invoices_read on public.invoices for select to authenticated
-  using (client_id in (select public.my_client_ids()) and (status <> 'draft' or public.is_staff()));
+  using (client_id in (select public.financial_client_ids()) and (status <> 'draft' or public.is_invoice_admin()));
 create policy invoices_staff_write on public.invoices for all to authenticated
-  using (public.is_staff() and client_id in (select public.my_client_ids()))
-  with check (public.is_staff() and client_id in (select public.my_client_ids()));
+  using (public.is_invoice_admin() and client_id in (select public.financial_client_ids()))
+  with check (public.is_invoice_admin() and client_id in (select public.financial_client_ids()));
 
 create policy invoice_items_read on public.invoice_items for select to authenticated
   using (invoice_id in (select id from public.invoices));
 create policy invoice_items_staff_write on public.invoice_items for all to authenticated
-  using (public.is_staff() and invoice_id in (select id from public.invoices))
-  with check (public.is_staff() and invoice_id in (select id from public.invoices));
+  using (public.is_invoice_admin() and invoice_id in (select id from public.invoices))
+  with check (public.is_invoice_admin() and invoice_id in (select id from public.invoices));
 
 -- action_items
 create policy action_items_read on public.action_items for select to authenticated

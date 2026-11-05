@@ -63,10 +63,10 @@ alter table public.agreements enable row level security;
 alter table public.agreement_events enable row level security;
 
 create policy agreement_templates_staff_read on public.agreement_templates
-  for select to authenticated using (public.is_staff());
+  for select to authenticated using (public.is_agreement_admin());
 create policy agreements_authorized_read on public.agreements
   for select to authenticated using (
-    (public.is_staff() and client_id in (select public.my_client_ids()))
+    (public.is_agreement_admin() and client_id in (select public.financial_client_ids()))
     or (client_id in (select public.my_client_ids()) and sent_at is not null
       and status in ('awaiting_client_signature', 'signed', 'cancelled'))
   );
@@ -90,7 +90,7 @@ create or replace function public.save_agreement_template(p_id uuid, p_name text
 returns public.agreement_templates language plpgsql security definer set search_path = '' as $$
 declare v_template public.agreement_templates;
 begin
-  if not public.is_staff() then raise exception 'Staff permission required' using errcode = '42501'; end if;
+  if not public.is_agreement_admin() then raise exception 'Staff permission required' using errcode = '42501'; end if;
   if p_name is null or length(trim(p_name)) not between 1 and 120 or jsonb_typeof(p_content) <> 'object' then
     raise exception 'Template name or content is invalid' using errcode = '22023';
   end if;
@@ -109,7 +109,7 @@ create or replace function public.create_agreement_draft(p_client_id uuid, p_tit
 returns public.agreements language plpgsql security definer set search_path = '' as $$
 declare v_agreement public.agreements;
 begin
-  if not public.is_staff() or p_client_id not in (select public.my_client_ids()) then
+  if not public.is_agreement_admin() or p_client_id not in (select public.financial_client_ids()) then
     raise exception 'You cannot create an agreement for this client' using errcode = '42501';
   end if;
   if p_title is null or length(trim(p_title)) not between 1 and 200 or jsonb_typeof(p_content) <> 'object' then
@@ -129,10 +129,10 @@ create or replace function public.update_agreement_draft(p_id uuid, p_title text
 returns public.agreements language plpgsql security definer set search_path = '' as $$
 declare v_agreement public.agreements;
 begin
-  if not public.is_staff() then raise exception 'Staff permission required' using errcode = '42501'; end if;
+  if not public.is_agreement_admin() then raise exception 'Staff permission required' using errcode = '42501'; end if;
   update public.agreements set title = trim(p_title), content = p_content,
     version = version + 1, updated_at = clock_timestamp()
-  where id = p_id and status = 'draft' and client_id in (select public.my_client_ids())
+  where id = p_id and status = 'draft' and client_id in (select public.financial_client_ids())
   returning * into v_agreement;
   if not found then raise exception 'Only an accessible draft can be edited' using errcode = '42501'; end if;
   insert into public.agreement_events(agreement_id, actor_user_id, event_type, details)
@@ -144,9 +144,9 @@ create or replace function public.request_agreement_founder_signature(p_id uuid)
 returns public.agreements language plpgsql security definer set search_path = '' as $$
 declare v_agreement public.agreements;
 begin
-  if not public.is_staff() then raise exception 'Staff permission required' using errcode = '42501'; end if;
+  if not public.is_agreement_admin() then raise exception 'Staff permission required' using errcode = '42501'; end if;
   update public.agreements set status = 'awaiting_founder_signature', updated_at = clock_timestamp()
-  where id = p_id and status = 'draft' and client_id in (select public.my_client_ids()) returning * into v_agreement;
+  where id = p_id and status = 'draft' and client_id in (select public.financial_client_ids()) returning * into v_agreement;
   if not found then raise exception 'Only an accessible draft can be submitted' using errcode = '42501'; end if;
   insert into public.agreement_events(agreement_id, actor_user_id, event_type)
   values (p_id, auth.uid(), 'submitted_for_founder_signature');
@@ -205,10 +205,10 @@ create or replace function public.cancel_agreement(p_id uuid)
 returns public.agreements language plpgsql security definer set search_path = '' as $$
 declare v_agreement public.agreements; v_now timestamptz := clock_timestamp();
 begin
-  if not public.is_staff() then raise exception 'Staff permission required' using errcode = '42501'; end if;
+  if not public.is_agreement_admin() then raise exception 'Staff permission required' using errcode = '42501'; end if;
   update public.agreements set status = 'cancelled', cancelled_by = auth.uid(), cancelled_at = v_now, updated_at = v_now
   where id = p_id and status in ('draft', 'awaiting_founder_signature', 'awaiting_client_signature')
-    and client_id in (select public.my_client_ids()) returning * into v_agreement;
+    and client_id in (select public.financial_client_ids()) returning * into v_agreement;
   if not found then raise exception 'This agreement cannot be cancelled' using errcode = '42501'; end if;
   insert into public.agreement_events(agreement_id, actor_user_id, event_type, created_at)
   values (p_id, auth.uid(), 'cancelled', v_now);
@@ -238,7 +238,7 @@ create policy agreement_signature_read on storage.objects for select to authenti
   bucket_id = 'agreements' and exists (
     select 1 from public.agreements a
     where a.id = ((storage.foldername(name))[2])::uuid
-      and ((public.is_staff() and a.client_id in (select public.my_client_ids()))
+      and ((public.is_agreement_admin() and a.client_id in (select public.financial_client_ids()))
         or (a.client_id in (select public.my_client_ids()) and a.sent_at is not null
           and a.status in ('awaiting_client_signature', 'signed', 'cancelled')))
   )

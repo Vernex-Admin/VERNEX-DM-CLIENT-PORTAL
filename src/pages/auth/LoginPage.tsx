@@ -45,7 +45,7 @@ export function LoginPage() {
         setSubmitError('We could not find an active Vernex Hub profile for this account. Contact Vernex.')
         return
       }
-      navigate(audience === 'staff' ? '/admin/clients' : '/', { replace: true })
+      navigate(audience === 'staff' ? '/admin' : '/', { replace: true })
     } catch (error) {
       setSubmitError(messageOf(error))
     }

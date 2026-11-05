@@ -19,10 +19,12 @@ Run each file once, in order, in Supabase: SQL Editor -> New query -> paste the 
 | `../migrations/20261022120000_agreement_signing.sql` | Agreement templates, draft/sign/send lifecycle, private signatures, audit events, RLS, and onboarding gate integration |
 | `../migrations/20261023120000_invoice_generator.sql` | Invoice Generator: editable invoice documents, server-side totals, draft/issue/revision lifecycle, manual payment status with audit history, company defaults, templates, private logo/QR images, disabled payment-gateway hook |
 | `../migrations/20261024120000_invoice_generator_issue_and_audit.sql` | Invoice Generator part 2: client notice (Action Required) on issue, resolved when paid or cancelled; names in the audit history; description limits so a row fits one A4 page; no duplicated rows or line items |
+| `../migrations/20261105230000_finance_admin_agreement_invoice.sql` | Restricted finance admin role for agreement and invoice workflows |
 
 Rules the database enforces:
 - Only emails with a profile row can sign in. Staff add people from the admin console.
-- Founder sees all clients; a PM sees assigned clients; client users see only their own client.
+- Founder sees all clients; a PM sees assigned clients; finance can read client/project details only
+  for agreement and invoice workflows; client users see only their own client.
 - Clients never see internal deliverables or comments, draft invoices or documents, leads, templates, or other clients.
 - Founder Box messages are visible to the founder and the sender only.
 - Clients approve and request revisions only through the functions, which check can_approve and the revision limit.
@@ -35,9 +37,10 @@ Tested on Postgres with 45 checks before delivery.
 After running `10_client_code_login.sql`, deploy the Edge Function from the repository root with
 `supabase functions deploy login-with-identifier`. Set `SUPABASE_SERVICE_ROLE_KEY` as an Edge
 Function secret; never add that key to a browser `.env` file. Client Codes are looked up by private
-hash, and email identifiers are resolved against active profiles. The function then asks Supabase
-Auth to verify the actual password. The browser receives only the normal Supabase auth session and
-loads the signed-in profile under that user's RLS permissions.
+hash by the function, which asks Supabase Auth to verify the password. Vernex staff email sign-in
+uses Supabase Auth directly, then reads only the signed-in user's profile under RLS and accepts only
+active staff profiles. The browser receives the normal Supabase auth session and loads the signed-in
+profile under that user's RLS permissions.
 
 ## Client Management (Client Codes, logins, client details)
 
@@ -82,6 +85,25 @@ Supabase project and set `SUPABASE_URL`, matching `SUPABASE_PROJECT_REF`, and
 existing password, refuses an inactive or non-founder profile, and verifies the Auth/profile link.
 The service-role key and initial password must never be placed in frontend environment variables or
 committed to the repository.
+
+## Finance and agreements admin
+
+Apply `../migrations/20261105230000_finance_admin_agreement_invoice.sql` with `supabase db push`
+after the earlier migrations. It adds `vernex_finance` with read access to client and project details
+needed to prepare agreements and invoices, but no client-management permissions. The role can create,
+edit and manage agreements and invoices; only the founder can approve and send an agreement.
+
+To create or verify the finance admin, confirm the Supabase project and set `SUPABASE_URL`,
+`SUPABASE_PROJECT_REF`, and `SUPABASE_SERVICE_ROLE_KEY` in a trusted shell. Set
+`FINANCE_ADMIN_INITIAL_PASSWORD` there only if the Auth account does not exist yet, then run
+`npm run setup:finance-admin`. The script preserves an existing password and verifies the active
+finance profile is linked to the Auth user. Never put the service-role key or password in frontend
+environment variables or commit them.
+
+To deliberately reset the existing finance admin password, set
+`FINANCE_ADMIN_RESET_PASSWORD` to a new password of at least 12 characters in the trusted shell and
+rerun `npm run setup:finance-admin`. This variable changes the existing Auth password only when
+explicitly provided; do not put it in `.env.local`.
 
 Assign or rotate each person's code in the Supabase SQL Editor using the example at the end of
 `10_client_code_login.sql`. Codes are case-insensitive and 6-64 letters, numbers, or hyphens.

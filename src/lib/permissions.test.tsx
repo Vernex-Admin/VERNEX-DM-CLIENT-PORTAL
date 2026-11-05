@@ -17,6 +17,7 @@ const byId = (id: string): Profile => {
 
 const founder = byId(SEED_IDS.founder)
 const pm = byId(SEED_IDS.pm)
+const finance: Profile = { ...founder, role: 'vernex_finance', email: 'finance@example.test' }
 const agkAdmin = byId(SEED_IDS.agkAdmin)
 const agkMember = byId(SEED_IDS.agkMember) // can_approve = false
 const raackMember = byId(SEED_IDS.raackMember) // can_approve = true
@@ -57,6 +58,24 @@ describe('admin roles', () => {
   it('lets only the founder read the Founder Box inbox', () => {
     expect(can(founder, 'founder_inbox', 'view')).toBe(true)
     expect(can(pm, 'founder_inbox', 'view')).toBe(false)
+  })
+
+  it('limits the finance admin to agreements and invoices', () => {
+    for (const resource of ['agreement', 'invoice'] as const) {
+      expect(can(finance, resource, 'view')).toBe(true)
+      expect(can(finance, resource, 'create')).toBe(true)
+      expect(can(finance, resource, 'edit')).toBe(true)
+      expect(can(finance, resource, 'delete')).toBe(true)
+    }
+    expect(can(finance, 'invoice_settings', 'edit')).toBe(true)
+    expect(can(finance, 'client', 'view')).toBe(true)
+    expect(can(finance, 'client', 'create')).toBe(false)
+    expect(can(finance, 'client', 'edit')).toBe(false)
+    expect(can(finance, 'project', 'view')).toBe(true)
+    expect(can(finance, 'document', 'view')).toBe(false)
+    expect(can(finance, 'staff', 'view')).toBe(false)
+    expect(can(finance, 'agreement', 'approve')).toBe(false)
+    expect(can(finance, 'founder_inbox', 'view')).toBe(false)
   })
 })
 

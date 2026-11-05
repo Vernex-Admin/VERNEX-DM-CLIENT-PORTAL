@@ -6,6 +6,7 @@ import type { Profile } from '../../types/db'
 const ROLE_LABEL: Record<Profile['role'], string> = {
   vernex_founder: 'founder',
   vernex_pm: 'PM',
+  vernex_finance: 'finance admin',
   client_admin: 'client admin',
   client_member: 'client member',
 }

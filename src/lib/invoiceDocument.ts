@@ -19,6 +19,8 @@ export const STARTING_ROWS = 12
  * business address, GSTIN and payment instructions are blank until an admin fills them in.
  */
 export const BUILT_IN_DEFAULTS: InvoiceDefaults = {
+  title: 'INVOICE',
+  subtitle: 'DIGITAL MARKETING SERVICES',
   company: {
     name: 'Vernex Digital Marketing',
     tagline: 'Crafting your digital narrative.',
@@ -51,6 +53,8 @@ export const blankBillTo = (): InvoiceBillTo => ({ company_name: '', contact_per
 export function newInvoiceDocument(defaults: InvoiceDefaults): InvoiceDocument {
   return {
     version: 1,
+    title: defaults.title ?? 'INVOICE',
+    subtitle: defaults.subtitle ?? 'DIGITAL MARKETING SERVICES',
     company: structuredClone(defaults.company),
     bill_to: blankBillTo(),
     project: { name: '', code: '', service_period_start: '', service_period_end: '', campaign_address: '' },
@@ -220,6 +224,8 @@ export function documentFromLegacy(
 export function withBuiltInDefaults(stored: Partial<InvoiceDefaults> | null | undefined): InvoiceDefaults {
   const base = structuredClone(BUILT_IN_DEFAULTS)
   if (!stored) return base
+  if (stored.title !== undefined) base.title = stored.title
+  if (stored.subtitle !== undefined) base.subtitle = stored.subtitle
   return {
     ...base,
     ...stored,

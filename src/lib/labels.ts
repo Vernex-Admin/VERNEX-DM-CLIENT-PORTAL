@@ -24,6 +24,7 @@ export const HEALTH_STATUS: Record<HealthStatus, { label: string; tone: Tone }> 
 export const USER_ROLE_LABEL: Record<UserRole, string> = {
   vernex_founder: 'Founder',
   vernex_pm: 'Project manager',
+  vernex_finance: 'Finance & Invoicing',
   client_admin: 'Client admin',
   client_member: 'Client member',
 }

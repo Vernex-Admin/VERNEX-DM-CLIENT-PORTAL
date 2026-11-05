@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { useClient, useCurrentProfile, useOnboarding } from '../lib/queries'
-import { audienceOf } from '../lib/permissions'
-import type { Audience } from '../lib/permissions'
+import { audienceOf, useCan } from '../lib/permissions'
+import type { Action, Audience, Resource } from '../lib/permissions'
 import { Skeleton } from './ui'
 
 export const LOGIN_PATH: Record<Audience, string> = { client: '/login', staff: '/login' }
@@ -43,6 +43,11 @@ function RequireAudience({ audience: required }: { audience: Audience }) {
 
 export const RequireClient = () => <RequireAudience audience="client" />
 export const RequireStaff = () => <RequireAudience audience="staff" />
+
+export function RequireCan({ resource, action }: { resource: Resource; action: Action }) {
+  const allowed = useCan(resource, action)
+  return allowed ? <Outlet /> : <Navigate to="/no-access" replace />
+}
 
 /** Wraps a login page: signed-in users are sent on to where they were going, or to their home. */
 export function RedirectIfSignedIn() {

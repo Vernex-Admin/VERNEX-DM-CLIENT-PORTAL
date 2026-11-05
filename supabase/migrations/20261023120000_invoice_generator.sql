@@ -120,13 +120,13 @@ alter table public.invoice_events    enable row level security;
 alter table public.invoice_payments  enable row level security;
 
 create policy invoice_settings_staff_read on public.invoice_settings for select to authenticated
-  using (public.is_staff());
+  using (public.is_invoice_admin());
 create policy invoice_templates_staff_read on public.invoice_templates for select to authenticated
-  using (public.is_staff());
+  using (public.is_invoice_admin());
 create policy invoice_events_staff_read on public.invoice_events for select to authenticated
-  using (public.is_staff() and invoice_id in (select id from public.invoices));
+  using (public.is_invoice_admin() and invoice_id in (select id from public.invoices));
 create policy invoice_payments_staff_read on public.invoice_payments for select to authenticated
-  using (public.is_staff() and invoice_id in (select id from public.invoices));
+  using (public.is_invoice_admin() and invoice_id in (select id from public.invoices));
 
 -- Every write goes through the functions below.
 revoke insert, update, delete, truncate, references, trigger
@@ -517,7 +517,7 @@ declare
   v_number   text := trim(coalesce(p_number, ''));
   v_currency text := p_document ->> 'currency';
 begin
-  if not public.is_staff() or p_client_id is null or p_client_id not in (select public.my_client_ids()) then
+  if not public.is_invoice_admin() or p_client_id is null or p_client_id not in (select public.financial_client_ids()) then
     raise exception 'You cannot create or edit invoices for this client.' using errcode = '42501';
   end if;
   if p_project_id is not null and not exists (
@@ -551,7 +551,7 @@ begin
            due_date = p_due_date,
            document = p_document
      where id = p_id and status = 'draft' and issued_at is null and document is not null
-       and client_id in (select public.my_client_ids())
+       and client_id in (select public.financial_client_ids())
     returning * into v_invoice;
     if not found then
       raise exception 'Only a draft can be edited. Create a revision of an issued invoice instead.';
@@ -572,11 +572,11 @@ declare
   v_original public.invoices;
   v_now      timestamptz := clock_timestamp();
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   select * into v_invoice from public.invoices
-   where id = p_id and client_id in (select public.my_client_ids()) for update;
+   where id = p_id and client_id in (select public.financial_client_ids()) for update;
   if not found or v_invoice.status <> 'draft' or v_invoice.document is null then
     raise exception 'Only a draft from the Invoice Generator can be issued.';
   end if;
@@ -620,11 +620,11 @@ declare
   v_original public.invoices;
   v_invoice  public.invoices;
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   select * into v_original from public.invoices
-   where id = p_id and client_id in (select public.my_client_ids()) for update;
+   where id = p_id and client_id in (select public.financial_client_ids()) for update;
   if not found or v_original.issued_at is null then
     raise exception 'Only an invoice issued from the Invoice Generator can be revised.';
   end if;
@@ -662,7 +662,7 @@ declare
   v_invoice public.invoices;
   v_amount  bigint;
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   if p_status is null or p_status not in ('sent', 'partially_paid', 'paid', 'overdue', 'void') then
@@ -672,7 +672,7 @@ begin
     raise exception 'Keep the note under 500 characters.';
   end if;
   select * into v_invoice from public.invoices
-   where id = p_id and client_id in (select public.my_client_ids()) for update;
+   where id = p_id and client_id in (select public.financial_client_ids()) for update;
   if not found then
     raise exception 'Invoice not found.' using errcode = 'P0002';
   end if;
@@ -710,7 +710,7 @@ declare
   v_mode     text := p_defaults #>> '{tax,mode}';
   v_rate     numeric;
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   if p_defaults is null or jsonb_typeof(p_defaults) <> 'object'
@@ -761,7 +761,7 @@ returns public.invoice_templates language plpgsql security definer set search_pa
 declare
   v_template public.invoice_templates;
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   if p_name is null or length(trim(p_name)) not between 1 and 120 then
@@ -786,7 +786,7 @@ end $$;
 create or replace function public.delete_invoice_template(p_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
-  if not public.is_staff() then
+  if not public.is_invoice_admin() then
     raise exception 'Staff permission required' using errcode = '42501';
   end if;
   delete from public.invoice_templates where id = p_id;
@@ -881,17 +881,17 @@ on conflict (id) do update
 -- Staff upload under a fresh random name. There is no update or delete policy: an issued invoice
 -- may point at an image, so replacing or removing one only changes which file new invoices use.
 create policy invoice_assets_staff_upload on storage.objects for insert to authenticated with check (
-  bucket_id = 'invoice-assets' and public.is_staff()
+  bucket_id = 'invoice-assets' and public.is_invoice_admin()
   and name ~ '^branding/(logo|qr)-[0-9a-f-]{36}\.(png|jpg|webp)$'
 );
 
 -- Staff read any; a client only the images on their own issued invoices.
 create policy invoice_assets_read on storage.objects for select to authenticated using (
   bucket_id = 'invoice-assets' and (
-    public.is_staff()
+    public.is_invoice_admin()
     or exists (
       select 1 from public.invoices i
-       where i.status <> 'draft' and i.client_id in (select public.my_client_ids())
+       where i.status <> 'draft' and i.client_id in (select public.financial_client_ids())
          and (i.document #>> '{company,logo,path}' = objects.name or i.document #>> '{payment,qr,path}' = objects.name)
     )
   )

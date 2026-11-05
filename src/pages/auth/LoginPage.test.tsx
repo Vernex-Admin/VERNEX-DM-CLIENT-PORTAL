@@ -39,7 +39,7 @@ function renderLogin() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<p>Client dashboard</p>} />
-        <Route path="/admin/clients" element={<p>Staff dashboard</p>} />
+        <Route path="/admin" element={<p>Staff dashboard</p>} />
       </Routes>
     </MemoryRouter>,
   )

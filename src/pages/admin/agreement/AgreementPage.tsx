@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Ban, FileText, Plus, Printer, Save, Send, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Ban, FileText, Plus, Printer, Save, Send, Trash2, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { PDFDocument } from 'pdf-lib'
 import { Icon } from '../../../components/Icon'
 import { Button, Card, CardBody, Field, Input, Select, useToast } from '../../../components/ui'
-import { useSessionProfile } from '../../../lib/session-context'
+import { useCan } from '../../../lib/permissions'
 import {
   useAgreementTemplates, useAgreements, useCancelAgreement, useClient, useClients,
   useAgreementEvents, useCreateAgreementDraft, useFounderSignAndSend, useGenerateFinalAgreementPdf, useRequestFounderSignature,
@@ -15,6 +15,7 @@ import type { AgreementContent } from '../../../types/agreement'
 import { formatClientSignedAt } from '../../../lib/agreementTime'
 import { appendClosingPage, CLOSING_PAGE_URL } from '../../../lib/agreementClosingPage'
 import { buildAgreementPdf, LETTERHEAD_URL } from '../../../lib/agreementPdf'
+import { invoiceImageProblem } from '../../../lib/invoiceDocument'
 
 export type Clause = {
   id: string
@@ -136,7 +137,7 @@ export default function AgreementPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const clientId = paramClientId ?? params.get('client') ?? ''
-  const profile = useSessionProfile()
+  const canManageClients = useCan('client', 'create')
   const clients = useClients()
   const templates = useAgreementTemplates()
   const agreements = useAgreements(clientId || undefined)
@@ -177,6 +178,9 @@ export default function AgreementPage() {
   const [templateId, setTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('Vernex Services Agreement')
   const [selectedAgreementId, setSelectedAgreementId] = useState('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [tagline, setTagline] = useState<string>('Crafting your digital narrative.')
+  const logoInputRef = useRef<HTMLInputElement>(null)
   const [zoomMode, setZoomMode] = useState<'fit-page' | '75' | '100' | 'fit-width'>('fit-page')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(true)
@@ -186,13 +190,14 @@ export default function AgreementPage() {
 
   const selectedAgreement = agreements.data?.find((row) => row.id === selectedAgreementId)
   const agreementEvents = useAgreementEvents(selectedAgreementId || undefined)
-  const isFounder = profile?.role === 'vernex_founder'
+  const isFounder = useCan('agreement', 'approve')
   const editable = !selectedAgreement || selectedAgreement.status === 'draft'
 
   function agreementContent(): AgreementContent {
     return {
       projectTitle, agreementDate, startDate, endDate, clientName, clientEmail, services, scope,
       paymentTerms, developerName, companyName, companySigner, companyTitle,
+      logoUrl, tagline,
       clauses: structuredClone(clauses),
     }
   }
@@ -213,6 +218,8 @@ export default function AgreementPage() {
     setCompanyName(agreement.content.companyName)
     setCompanySigner(agreement.content.companySigner)
     setCompanyTitle(agreement.content.companyTitle)
+    setLogoUrl(agreement.content.logoUrl ?? null)
+    setTagline(agreement.content.tagline ?? 'Crafting your digital narrative.')
     setClauses(agreement.content.clauses)
   }
 
@@ -382,7 +389,7 @@ export default function AgreementPage() {
       <div className="agreement-editor-toolbar sticky top-12 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-rule bg-paper/95 py-2 backdrop-blur no-print">
         <div className="flex items-center gap-3">
           <Link
-            to={clientId ? `/admin/clients/${clientId}` : '/admin/clients'}
+            to={canManageClients ? (clientId ? `/admin/clients/${clientId}` : '/admin/clients') : '/admin/agreement'}
             className="inline-flex min-h-[36px] items-center gap-1.5 rounded-card border border-rule px-3 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink"
           >
             <Icon icon={ArrowLeft} size={15} />
@@ -457,6 +464,8 @@ export default function AgreementPage() {
                   setCompanyName(content.companyName)
                   setCompanySigner(content.companySigner)
                   setCompanyTitle(content.companyTitle)
+                  setLogoUrl(content.logoUrl ?? null)
+                  setTagline(content.tagline ?? 'Crafting your digital narrative.')
                   setClauses(content.clauses.length ? content.clauses : DEFAULT_CLAUSES)
                 }}>
                   <option value="">Start from current agreement</option>
@@ -481,6 +490,133 @@ export default function AgreementPage() {
                   </Select>
                 </Field>
               )}
+
+              {/* Branding: Logo & Tagline */}
+              <div className="rounded-card border border-rule bg-paper/50 p-3.5 flex flex-col gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Letterhead Branding</h3>
+
+                <Field label="Letterhead Logo" hint="Upload custom logo from computer or remove">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-16 shrink-0 place-items-center rounded-card border border-rule bg-surface p-1 overflow-hidden">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="Agreement logo" className="max-h-full max-w-full object-contain" />
+                      ) : logoUrl === '' ? (
+                        <span className="text-[10px] text-ink-muted">No logo</span>
+                      ) : (
+                        <img src="/vernex-digital-marketing.png" alt="Vernex logo" className="max-h-full max-w-full object-contain" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        disabled={!editable}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const problem = invoiceImageProblem(file)
+                          if (problem) {
+                            toast({ title: problem, tone: 'bad' })
+                            e.target.value = ''
+                            return
+                          }
+                          void createImageBitmap(file).then((bitmap) => {
+                            const canvas = document.createElement('canvas')
+                            canvas.width = bitmap.width
+                            canvas.height = bitmap.height
+                            const context = canvas.getContext('2d')
+                            if (!context) {
+                              bitmap.close()
+                              throw new Error('Could not prepare the logo image.')
+                            }
+                            context.drawImage(bitmap, 0, 0)
+                            bitmap.close()
+                            setLogoUrl(canvas.toDataURL('image/png'))
+                            toast({ title: 'Logo updated', tone: 'ok' })
+                          }).catch((error: unknown) => {
+                            toast({
+                              title: error instanceof Error ? error.message : 'Could not read the logo image.',
+                              tone: 'bad',
+                            })
+                          })
+                          e.target.value = ''
+                        }}
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!editable}
+                          onClick={() => logoInputRef.current?.click()}
+                          className="gap-1 text-xs"
+                        >
+                          <Icon icon={Upload} size={13} />
+                          {logoUrl ? 'Replace' : 'Upload Logo'}
+                        </Button>
+                        {logoUrl !== null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!editable}
+                            onClick={() => setLogoUrl(null)}
+                            className="text-xs"
+                          >
+                            Reset Default
+                          </Button>
+                        )}
+                        {logoUrl !== '' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!editable}
+                            onClick={() => setLogoUrl('')}
+                            className="text-xs text-bad"
+                          >
+                            Remove Logo
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Field>
+
+                <Field label="Letterhead Tagline" hint="Edit tagline text or leave blank to remove">
+                  <div className="flex flex-col gap-1.5">
+                    <Input
+                      value={tagline}
+                      disabled={!editable}
+                      onChange={(e) => setTagline(e.target.value)}
+                      placeholder="Crafting your digital narrative."
+                    />
+                    <div className="flex gap-2">
+                      {tagline && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!editable}
+                          onClick={() => setTagline('')}
+                          className="text-xs text-bad"
+                        >
+                          Remove Tagline
+                        </Button>
+                      )}
+                      {tagline !== 'Crafting your digital narrative.' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!editable}
+                          onClick={() => setTagline('Crafting your digital narrative.')}
+                          className="text-xs"
+                        >
+                          Reset Default
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Field>
+              </div>
 
               <Field label="Project Title">
                 <Input

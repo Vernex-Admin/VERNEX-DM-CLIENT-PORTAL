@@ -6,8 +6,10 @@ Rules:
 - Screens import data only from src/lib/queries, never src/data.
 - Permissions only through useCan() from src/lib/permissions.ts. No role
   checks inside components.
-- Admin roles (vernex_founder, vernex_pm) create, edit, delete clients,
-  client users, projects, milestones, deliverables, invoices.
+- Admin roles (vernex_founder, vernex_pm) manage client work. The
+  vernex_finance role manages agreements and invoices only, with read-only
+  client/project details needed for those workflows; only the founder sends
+  agreements to clients.
 - Client roles (client_admin, client_member) only view their own client,
   plus: approve or request revision (client_member only if can_approve),
   service requests, Brand Assets upload, comments, Founder Box.
