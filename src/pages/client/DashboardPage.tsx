@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { ActionBanner } from '../../components/ActionBanner'
 import { ActivityFeed } from '../../components/ActivityFeed'
+import { GettingStarted } from '../../components/GettingStarted'
 import { HealthPill } from '../../components/HealthPill'
 import { KpiStrip } from '../../components/KpiStrip'
 import { LeadCard } from '../../components/LeadCard'
@@ -53,6 +54,8 @@ export default function DashboardPage({ previewClientId }: { previewClientId?: s
       <h1 className="sr-only">Dashboard</h1>
 
       {actions.isPending ? <BannerSkeleton /> : <ActionBanner items={actions.data ?? []} projectNames={projectNames} />}
+
+      {client.data && <GettingStarted client={client.data} readOnly={Boolean(previewClientId)} />}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)]">
         <Card>

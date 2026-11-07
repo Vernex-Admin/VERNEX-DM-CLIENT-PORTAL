@@ -62,11 +62,14 @@ Deno.serve(async (request) => {
 
   let accountEmail: string | undefined
   if (isEmail) {
+    // Email sign-in is for Vernex staff. Client users sign in with their Client Code only, so a
+    // client's email gets the same answer as an unknown one.
     const { data: profile, error: lookupError } = await admin
       .from('profiles')
       .select('email,is_active')
       .eq('email', normalizedIdentifier)
       .eq('is_active', true)
+      .is('client_id', null)
       .maybeSingle()
     if (!lookupError && profile?.is_active) accountEmail = profile.email
   } else {

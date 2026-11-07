@@ -6,6 +6,7 @@ import { Icon } from '../../../components/Icon'
 import { QueryError } from '../../../components/QueryError'
 import { Button, Card, CardBody, CardHeader, EmptyState, Field, Input, Select, Skeleton, Switch, Table, useToast } from '../../../components/ui'
 import type { Column } from '../../../components/ui'
+import { isLoginOnlyEmail } from '../../../lib/credentials'
 import { USER_ROLE_LABEL } from '../../../lib/labels'
 import { useCan } from '../../../lib/permissions'
 import {
@@ -38,7 +39,7 @@ export function TeamTab({ clientId }: { clientId: string }) {
         {canInvite && (
           <Button variant="primary" onClick={() => setDrawer('new')}>
             <Icon icon={UserPlus} size={16} />
-            Invite user
+            Add user
           </Button>
         )}
       </div>
@@ -118,7 +119,11 @@ function UsersTable({
   const canInvite = useCan('client_user', 'create', { clientId })
   const columns: Column<Profile>[] = [
     { key: 'name', header: 'Name', cell: (user) => <span className="font-medium">{user.full_name}</span> },
-    { key: 'email', header: 'Email', cell: (user) => user.email },
+    {
+      key: 'email',
+      header: 'Email',
+      cell: (user) => (isLoginOnlyEmail(user.email) ? <span className="text-ink-muted">None (signs in with Client Code)</span> : user.email),
+    },
     { key: 'role', header: 'Role', cell: (user) => USER_ROLE_LABEL[user.role] },
     { key: 'approve', header: 'Can approve', cell: (user) => <ApproveToggle user={user} /> },
     { key: 'actions', header: 'Actions', cell: (user) => <UserActions user={user} onEdit={onEdit} onRemove={onRemove} /> },
@@ -134,11 +139,11 @@ function UsersTable({
         <EmptyState
           icon={Users}
           title="No one from this client has an account"
-          description="Invite the client's admin so they can sign in and approve work."
+          description="Add the client's admin, then set up their login so they can sign in and approve work."
           action={
             canInvite ? (
               <Button variant="primary" onClick={onInvite}>
-                Invite user
+                Add user
               </Button>
             ) : undefined
           }
@@ -231,11 +236,11 @@ function UserDrawer({ clientId, user, onClose }: { clientId: string; user: Profi
           email: values.email.trim(),
           role: values.role,
         })
-        toast({ title: `Invitation sent to ${values.email.trim()}`, tone: 'ok' })
+        toast({ title: `${values.full_name.trim()} added`, description: 'Set up their login from the Login tab.', tone: 'ok' })
       }
       onClose()
     } catch (error) {
-      toast({ title: user ? 'Could not save changes' : 'Could not invite them', description: messageOf(error), tone: 'bad' })
+      toast({ title: user ? 'Could not save changes' : 'Could not add them', description: messageOf(error), tone: 'bad' })
     }
   }
 
@@ -243,11 +248,11 @@ function UserDrawer({ clientId, user, onClose }: { clientId: string; user: Profi
     <FormDrawer
       open
       onClose={onClose}
-      title={user ? `Edit ${user.full_name}` : 'Invite a user'}
-      description={user ? undefined : 'They get an email with a sign-in link.'}
+      title={user ? `Edit ${user.full_name}` : 'Add a user'}
+      description={user ? undefined : 'Once added, set up their Client Code login from the Login tab.'}
       dirty={dirty}
       onSubmit={submit}
-      submitLabel={user ? 'Save changes' : 'Send invitation'}
+      submitLabel={user ? 'Save changes' : 'Add user'}
       pending={create.isPending || update.isPending}
       submitDisabled={!can}
     >

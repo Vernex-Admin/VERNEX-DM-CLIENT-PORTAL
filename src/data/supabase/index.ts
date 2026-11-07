@@ -1,4 +1,5 @@
 import type { DataLayer } from '../types'
+import { access } from './access'
 import { actionItems } from './actionItems'
 import { activity } from './activity'
 import { aiDrafts } from './aiDrafts'
@@ -28,6 +29,7 @@ export const supabaseData: DataLayer = {
   auth: supabaseAuth,
   session: supabaseSession,
   clients,
+  access,
   profiles,
   projects,
   milestones,

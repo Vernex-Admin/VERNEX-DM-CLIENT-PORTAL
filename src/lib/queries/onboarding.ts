@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
-import type { DocumentInsert, DocumentPatch, OnboardingItemPatch, TemplatePatch } from '../../data'
+import type { DocumentInsert, DocumentPatch, OnboardingItemPatch } from '../../data'
 import type { ServiceType } from '../../types/db'
 import { keys, R } from './keys'
 
@@ -92,21 +92,6 @@ export function useRemoveDocument() {
       queryClient.invalidateQueries({ queryKey: keys.all(R.documents) })
       queryClient.invalidateQueries({ queryKey: keys.all(R.onboardingGates) })
     },
-  })
-}
-
-export function useMessageTemplates() {
-  return useQuery({
-    queryKey: keys.all(R.templates),
-    queryFn: () => data.templates.list(),
-  })
-}
-
-export function useUpdateMessageTemplate() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: TemplatePatch }) => data.templates.update(id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.all(R.templates) }),
   })
 }
 

@@ -19,10 +19,10 @@ export type Minor = number
 // Enums
 // ---------------------------------------------------------------------------
 
-export const USER_ROLES = ['vernex_founder', 'vernex_pm', 'client_admin', 'client_member'] as const
+export const USER_ROLES = ['vernex_founder', 'vernex_pm', 'vernex_finance', 'client_admin', 'client_member'] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
-export const STAFF_ROLES = ['vernex_founder', 'vernex_pm'] as const satisfies readonly UserRole[]
+export const STAFF_ROLES = ['vernex_founder', 'vernex_pm', 'vernex_finance'] as const satisfies readonly UserRole[]
 export const CLIENT_ROLES = ['client_admin', 'client_member'] as const satisfies readonly UserRole[]
 export type StaffRole = (typeof STAFF_ROLES)[number]
 export type ClientRole = (typeof CLIENT_ROLES)[number]
@@ -193,6 +193,12 @@ export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
 export const DOCUMENT_STATUSES = ['draft', 'sent', 'signed'] as const
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
 
+export const DETAIL_FIELD_TYPES = ['text', 'textarea', 'email', 'phone', 'url', 'number', 'date'] as const
+export type DetailFieldType = (typeof DETAIL_FIELD_TYPES)[number]
+
+/** Who last set a client user's password. */
+export type PasswordSetBy = 'vernex' | 'client'
+
 export const TEMPLATE_CHANNELS = ['whatsapp', 'email'] as const
 export type TemplateChannel = (typeof TEMPLATE_CHANNELS)[number]
 
@@ -217,7 +223,43 @@ export type Client = {
   /** Onboarding (playbook): which checklist this client gets, and their setup-form answers. */
   service_type: ServiceType | null
   onboarding_answers: Record<string, unknown> | null
+  /** VXC-1001, VXC-1002, ...: assigned by the system when the client is created; never changes. */
+  client_code: string
+  /** The details form this client fills in. Null means the standard fields (src/lib/clientDetails.ts). */
+  detail_fields: ClientDetailField[] | null
+  /** The client's answers to the details form, by field key. */
+  details: Record<string, string> | null
+  /** Set when the client sends their details to Vernex for review. */
+  details_submitted_at: Timestamp | null
+  /** Set when Vernex locks the details: from then on the client can only read them. */
+  details_locked_at: Timestamp | null
+  details_locked_by: UUID | null
   created_at: Timestamp
+}
+
+/** One question on a client's details form. Vernex can change the form per client. */
+export type ClientDetailField = {
+  /** Where the answer is kept in `Client.details`: lowercase letters, digits and underscores. */
+  key: string
+  label: string
+  type: DetailFieldType
+  required: boolean
+  /** Groups fields on the form, e.g. "Business" or "Contact". */
+  section: string
+  hint: string | null
+}
+
+/**
+ * A client user's sign-in: their login code and the password Vernex issued (or the client chose).
+ * Staff only: a client never reads this table. Table: client_credentials.
+ */
+export type ClientCredential = {
+  profile_id: UUID
+  client_id: UUID
+  login_code: string
+  password: string
+  set_by: PasswordSetBy
+  updated_at: Timestamp
 }
 
 /** A person. `client_id` is null for Vernex staff and set for client users. */
@@ -233,6 +275,8 @@ export type Profile = {
   can_approve: boolean
   is_active: boolean
   notification_prefs: NotificationPrefs
+  /** Client users: what they sign in with (VXC-1001, or VXC-1001-2 for a second person). Null until a login is set up. */
+  login_code: string | null
   created_at: Timestamp
 }
 
@@ -675,6 +719,7 @@ export type MessageTemplate = {
 export type Tables = {
   clients: Client
   profiles: Profile
+  client_credentials: ClientCredential
   client_assignments: ClientAssignment
   projects: Project
   milestones: Milestone
@@ -733,8 +778,17 @@ export type ClientInsert = Insert<
   | 'retainer_months'
   | 'service_type'
   | 'onboarding_answers'
+  | 'client_code'
+  | 'detail_fields'
+  | 'details'
+  | 'details_submitted_at'
+  | 'details_locked_at'
+  | 'details_locked_by'
 >
-export type ProfileInsert = Insert<Profile, 'phone_e164' | 'avatar_url' | 'can_approve' | 'is_active' | 'notification_prefs'>
+export type ProfileInsert = Insert<
+  Profile,
+  'phone_e164' | 'avatar_url' | 'can_approve' | 'is_active' | 'notification_prefs' | 'login_code'
+>
 export type ProjectInsert = Insert<
   Project,
   'description' | 'health' | 'health_reason' | 'start_date' | 'target_end_date' | 'default_revision_limit'

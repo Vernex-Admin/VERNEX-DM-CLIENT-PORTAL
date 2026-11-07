@@ -45,7 +45,7 @@ export function LoginPage() {
         setSubmitError('We could not find an active Vernex Hub profile for this account. Contact Vernex.')
         return
       }
-      navigate(audience === 'staff' ? '/admin/clients' : '/', { replace: true })
+      navigate(audience === 'staff' ? '/admin' : '/', { replace: true })
     } catch (error) {
       setSubmitError(messageOf(error))
     }
@@ -91,7 +91,7 @@ export function LoginPage() {
                     autoCapitalize="characters"
                     spellCheck={false}
                     inputMode="text"
-                    placeholder="Enter your Client Code or email"
+                    placeholder="Your Client Code, e.g. VXC-1001"
                     value={identifier}
                     onChange={(event) => {
                       setIdentifier(event.target.value)

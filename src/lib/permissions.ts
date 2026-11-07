@@ -14,6 +14,7 @@ export type Resource =
   | 'service_request'
   | 'invoice'
   | 'invoice_settings'
+  | 'agreement'
   | 'action_item'
   | 'brand_asset'
   | 'comment'
@@ -28,8 +29,23 @@ export type Resource =
   | 'document'
   | 'template'
   | 'staff'
+  // The details form a client fills in, and Vernex reviews and locks.
+  | 'client_details'
+  // Client Codes, login codes and passwords. Staff only.
+  | 'client_access'
+  // A client user changing their own password.
+  | 'own_password'
 
-export type Action = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'request_revision' | 'upload' | 'submit'
+export type Action =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'approve'
+  | 'request_revision'
+  | 'upload'
+  | 'submit'
+  | 'lock'
 
 export type Permission = `${Resource}:${Action}`
 
@@ -48,6 +64,7 @@ const STAFF: readonly Permission[] = [
   ...crud('milestone'),
   ...crud('deliverable'),
   ...crud('invoice'),
+  ...crud('agreement'),
   // Company defaults, payment mode and invoice images for the Invoice Generator.
   'invoice_settings:view',
   'invoice_settings:edit',
@@ -71,6 +88,14 @@ const STAFF: readonly Permission[] = [
   'internal_comment:create',
   'social_metrics:view',
   'social_metrics:create',
+  // Staff edit a client's details at any time, change the form per client, and lock it.
+  'client_details:view',
+  'client_details:edit',
+  'client_details:lock',
+  // Staff issue and reset logins, and can read the current password.
+  'client_access:view',
+  'client_access:create',
+  'client_access:edit',
 ]
 
 // Client roles: view their own client's data, plus client actions.
@@ -99,12 +124,26 @@ const CLIENT: readonly Permission[] = [
   'brand_asset:upload',
   'comment:create',
   'founder_box:create',
+  // Fill in their own details until Vernex locks them (the lock is checked by the data layer).
+  'client_details:view',
+  'client_details:submit',
+  'own_password:edit',
 ]
 
 export const POLICY: Record<UserRole, readonly Permission[]> = {
-  // Only the founder reads the Founder Box and deletes clients; the PM sees none of it.
-  vernex_founder: [...STAFF, 'client:delete', ...crud('staff'), 'staff:view', 'founder_inbox:view', 'founder_inbox:edit'],
+  // Only the founder reads the Founder Box, approves agreements and deletes clients; the PM sees none of it.
+  vernex_founder: [...STAFF, 'agreement:approve', 'client:delete', ...crud('staff'), 'staff:view', 'founder_inbox:view', 'founder_inbox:edit'],
   vernex_pm: STAFF,
+  // Finance & Agreements admin: may read clients only to link agreements and invoices.
+  vernex_finance: [
+    'client:view',
+    'project:view',
+    ...crud('invoice'),
+    'invoice_settings:view',
+    'invoice_settings:edit',
+    ...crud('agreement'),
+    ...crud('template'),
+  ],
   client_admin: CLIENT,
   client_member: CLIENT,
 }
@@ -131,7 +170,7 @@ export function can(
   ctx: PermissionContext = {},
 ): boolean {
   if (!profile || !profile.is_active) return false
-  if (!POLICY[profile.role].includes(`${resource}:${action}`)) return false
+  if (!POLICY[profile.role]?.includes(`${resource}:${action}`)) return false
 
   const isClientUser = profile.role === 'client_admin' || profile.role === 'client_member'
   if (isClientUser && ctx.clientId !== undefined && ctx.clientId !== profile.client_id) return false
@@ -147,7 +186,7 @@ export type Audience = 'staff' | 'client'
 
 export function audienceOf(profile: Profile | null | undefined): Audience | null {
   if (!profile || !profile.is_active) return null
-  return profile.role === 'vernex_founder' || profile.role === 'vernex_pm' ? 'staff' : 'client'
+  return profile.role === 'vernex_founder' || profile.role === 'vernex_pm' || profile.role === 'vernex_finance' ? 'staff' : 'client'
 }
 
 /** `can()` for the signed-in user. False while the session is loading. */

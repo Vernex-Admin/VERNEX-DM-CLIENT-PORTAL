@@ -99,6 +99,7 @@ export default function ClientAgreementPage() {
           clientSignatureUrl={row.client_signature_url}
           clientSignedAt={row.client_signed_at}
           clientTimeZone={row.client_timezone}
+          founderSignedAt={row.founder_signed_at}
           formatClientTime={formatClientSignedAt}
         />
       </section>

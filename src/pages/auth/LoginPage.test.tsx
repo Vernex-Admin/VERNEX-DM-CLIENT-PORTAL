@@ -28,6 +28,7 @@ function profile(role: Profile['role']): Profile {
     can_approve: true,
     is_active: true,
     notification_prefs: { email: true, whatsapp: true, approvals: true, comments: true, invoices: true, weekly_report: false },
+    login_code: null,
     created_at: new Date(0).toISOString(),
   }
 }
@@ -38,7 +39,7 @@ function renderLogin() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<p>Client dashboard</p>} />
-        <Route path="/admin/clients" element={<p>Staff dashboard</p>} />
+        <Route path="/admin" element={<p>Staff dashboard</p>} />
       </Routes>
     </MemoryRouter>,
   )

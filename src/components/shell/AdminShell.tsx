@@ -1,4 +1,4 @@
-import { FileCheck, FileText, Receipt, SquareKanban, Users } from 'lucide-react'
+import { FileCheck, Receipt, UserCog, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useSearchParams } from 'react-router'
 import { cn } from '../../lib/cn'
@@ -11,17 +11,16 @@ import { UserMenu } from './UserMenu'
 type NavItem = { to: string; label: string; icon: LucideIcon; show: boolean }
 
 export function AdminShell() {
-  const canSeeLeads = useCan('lead', 'view')
-  const canSeeTemplates = useCan('template', 'view')
-  const { data: clients = [] } = useClients()
+  const canManageAccess = useCan('client_access', 'view')
+  const canManageClients = useCan('client', 'create')
+  const { data: clients = [] } = useClients(canManageClients)
   const [params, setParams] = useSearchParams()
 
   const items: NavItem[] = [
-    { to: '/admin/clients', label: 'Clients', icon: Users, show: true },
-    { to: '/admin/pipeline', label: 'Pipeline', icon: SquareKanban, show: canSeeLeads },
+    { to: '/admin/clients', label: 'Clients', icon: Users, show: canManageClients },
+    { to: '/admin/client-management', label: 'Client Management', icon: UserCog, show: canManageAccess },
     { to: '/admin/agreement', label: 'Agreement', icon: FileCheck, show: true },
     { to: '/admin/invoices', label: 'Invoices', icon: Receipt, show: true },
-    { to: '/admin/templates', label: 'Templates', icon: FileText, show: canSeeTemplates },
   ].filter((item) => item.show)
 
   function pickClient(id: string) {
@@ -43,22 +42,26 @@ export function AdminShell() {
           <Pill tone="neutral">Vernex team</Pill>
         </div>
         <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor="client-switcher">
-            Client
-          </label>
-          <Select
-            id="client-switcher"
-            className="w-40 sm:w-56 lg:!min-h-[36px] lg:!text-[13px]"
-            value={params.get('client') ?? ''}
-            onChange={(event) => pickClient(event.target.value)}
-          >
-            <option value="">All clients</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </Select>
+          {canManageClients && (
+            <>
+              <label className="sr-only" htmlFor="client-switcher">
+                Client
+              </label>
+              <Select
+                id="client-switcher"
+                className="w-40 sm:w-56 lg:!min-h-[36px] lg:!text-[13px]"
+                value={params.get('client') ?? ''}
+                onChange={(event) => pickClient(event.target.value)}
+              >
+                <option value="">All clients</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </Select>
+            </>
+          )}
           <UserMenu audience="staff" />
         </div>
       </header>

@@ -64,13 +64,13 @@ describe('walkthrough: a new client to its first deliverable on the client dashb
 
     // 2. Invite the client's admin.
     fireEvent.click(screen.getByRole('tab', { name: 'Team' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Invite user' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add user' }))
     form = await drawer()
     fireEvent.change(form.getByLabelText(/^Name/), { target: { value: 'Meera Iyer' } })
     fireEvent.change(form.getByLabelText(/^Email/), { target: { value: 'meera@zen.example' } })
     fireEvent.change(form.getByLabelText('Role'), { target: { value: 'client_admin' } })
-    fireEvent.click(form.getByRole('button', { name: 'Send invitation' }))
-    expect(await screen.findByText('Invitation sent to meera@zen.example')).toBeTruthy()
+    fireEvent.click(form.getByRole('button', { name: 'Add user' }))
+    expect(await screen.findByText('Meera Iyer added')).toBeTruthy()
     expect(await screen.findByText('Meera Iyer')).toBeTruthy()
 
     // 3. A project.
@@ -215,7 +215,7 @@ describe('drawers', () => {
 
     // A clean drawer closes on Esc without a warning.
     fireEvent.click(screen.getByRole('tab', { name: 'Team' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Invite user' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add user' }))
     const invite = await screen.findByRole('dialog')
     const cancel = new Event('cancel', { cancelable: true })
     fireEvent(invite, cancel)
@@ -296,11 +296,11 @@ describe('team', () => {
   it('refuses a duplicate email with a toast', async () => {
     await signInAs(SEED_IDS.founder)
     renderAt(`/admin/clients/${SEED_IDS.agk}?tab=team`)
-    fireEvent.click(await screen.findByRole('button', { name: 'Invite user' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add user' }))
     const form = await drawer()
     fireEvent.change(form.getByLabelText(/^Name/), { target: { value: 'Dup' } })
     fireEvent.change(form.getByLabelText(/^Email/), { target: { value: db.profiles.find((row) => row.id === SEED_IDS.agkAdmin)!.email } })
-    fireEvent.click(form.getByRole('button', { name: 'Send invitation' }))
+    fireEvent.click(form.getByRole('button', { name: 'Add user' }))
     expect(await screen.findByText('Someone already uses that email address.')).toBeTruthy()
   })
 })

@@ -14,6 +14,8 @@ export type AgreementContent = {
   companyName: string
   companySigner: string
   companyTitle: string
+  logoUrl?: string | null
+  tagline?: string
   clauses: AgreementClause[]
 }
 

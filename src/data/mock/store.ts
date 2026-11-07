@@ -62,7 +62,7 @@ export function me(): Profile {
 
 /** The tenant rule: founder sees every client, a PM their assigned clients, a client user their own. */
 export function visibleClientIds(profile: Profile): Set<string> {
-  if (profile.role === 'vernex_founder') return new Set(db.clients.map((client) => client.id))
+  if (profile.role === 'vernex_founder' || profile.role === 'vernex_finance') return new Set(db.clients.map((client) => client.id))
   if (profile.role === 'vernex_pm') {
     return new Set(db.client_assignments.filter((row) => row.user_id === profile.id).map((row) => row.client_id))
   }

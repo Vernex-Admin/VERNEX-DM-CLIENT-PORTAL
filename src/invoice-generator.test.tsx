@@ -100,6 +100,24 @@ async function issuedInvoice(clientId: string, description = 'Website maintenanc
 }
 
 describe('Admin → Invoices', () => {
+  it('limits the finance admin to the agreement and invoice workflows', async () => {
+    await signInAs(SEED_IDS.gentechAdmin)
+    renderAt('/admin/client-management')
+    expect(await screen.findByText("You don't have access")).toBeTruthy()
+
+    cleanup()
+    renderAt('/admin/agreement')
+    expect(await screen.findByRole('heading', { name: 'Digital Agreement' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve & Send to Client' })).toBeNull()
+
+    cleanup()
+    renderAt('/admin/invoices')
+    expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeTruthy()
+    cleanup()
+    renderAt(`/admin/invoices/new?client=${SEED_IDS.agk}`)
+    expect(await screen.findByLabelText('Description, row 1')).toBeTruthy()
+  })
+
   it('lists invoices across clients with filters, and opens Create Invoice', async () => {
     const issued = await issuedInvoice(SEED_IDS.raack)
     renderAt('/admin/invoices')
@@ -145,6 +163,26 @@ describe('Admin → Invoices', () => {
 })
 
 describe('editing the invoice', () => {
+  it('allows invoice title and subtitle to be edited or removed', async () => {
+    await openGenerator()
+    type('Invoice title', 'Monthly Invoice')
+    type('Invoice subtitle', 'Social media services')
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => {
+      expect(db.invoices.some((invoice) => invoice.document?.title === 'Monthly Invoice')).toBe(true)
+    })
+    const saved = db.invoices.find((invoice) => invoice.document?.title === 'Monthly Invoice')
+    if (!saved) throw new Error('Invoice draft was not saved.')
+    expect(saved.document).toMatchObject({ title: 'Monthly Invoice', subtitle: 'Social media services' })
+
+    type('Invoice title', '')
+    type('Invoice subtitle', '')
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => {
+      expect(db.invoices.find((invoice) => invoice.id === saved.id)?.document).toMatchObject({ title: '', subtitle: '' })
+    })
+  })
+
   it('starts with 12 numbered blank rows and the client filled in from its record', async () => {
     await openGenerator()
     expect(screen.getByLabelText('Description, row 12')).toBeTruthy()

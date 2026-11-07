@@ -1,9 +1,11 @@
 import type { Session } from '@supabase/supabase-js'
 import { NOT_INVITED_MESSAGE, clearReturnPath, isNotInvited } from '../../lib/authMessages'
 import type { Profile } from '../../types/db'
+import { STAFF_ROLES } from '../../types/db'
 import { DataError } from '../types'
 import type { AuthRepo, AuthSession, SessionRepo } from '../types'
 import { supabase } from './client'
+import { invokeFunction } from './edge'
 import { toDataError } from './errors'
 
 const callbackUrl = () => `${window.location.origin}/auth/callback`
@@ -37,21 +39,43 @@ export const supabaseAuth: AuthRepo = {
     }
     if (!password) throw new DataError('invalid', 'Enter your password.')
 
-    const { data, error } = await supabase().functions.invoke('login-with-identifier', {
-      body: { identifier: isEmail ? value.toLowerCase() : value.toUpperCase(), password },
-    })
-    let serverMessage: string | undefined
-    if (error?.context instanceof Response) {
-      try {
-        const body = await error.context.json() as { error?: unknown }
-        if (typeof body.error === 'string') serverMessage = body.error
-      } catch {
-        // Use the generic message when the Edge Function response isn't JSON.
+    const fallback = 'Invalid Client Code or password. Try again.'
+    if (isEmail) {
+      const sb = supabase()
+      const { data, error } = await sb.auth.signInWithPassword({ email: value.toLowerCase(), password })
+      if (error) throw authError(error)
+      if (!data.session) throw new DataError('invalid', fallback)
+
+      const { data: profile, error: profileError } = await sb
+        .from('profiles')
+        .select('role,is_active')
+        .eq('user_id', data.session.user.id)
+        .maybeSingle()
+      if (profileError) {
+        const { error: signOutError } = await sb.auth.signOut()
+        if (signOutError) throw authError(signOutError)
+        throw toDataError(profileError)
       }
+      if (!profile?.is_active || !STAFF_ROLES.some((role) => role === profile.role)) {
+        const { error: signOutError } = await sb.auth.signOut()
+        if (signOutError) throw authError(signOutError)
+        throw new DataError('invalid', fallback)
+      }
+      return toSession(data.session)
     }
-    if (error || !data?.access_token || !data?.refresh_token) {
-      throw new DataError('invalid', serverMessage || 'Invalid identifier or password. Try again.')
+
+    let data: { access_token?: string; refresh_token?: string } | null
+    try {
+      data = await invokeFunction<{ access_token?: string; refresh_token?: string } | null>(
+        'login-with-identifier',
+        { identifier: isEmail ? value.toLowerCase() : value.toUpperCase(), password },
+        fallback,
+      )
+    } catch (error) {
+      // Signing in has no session to lose, so every refusal reads as a sign-in problem.
+      throw new DataError('invalid', error instanceof DataError ? error.message : fallback)
     }
+    if (!data?.access_token || !data?.refresh_token) throw new DataError('invalid', fallback)
 
     const { data: sessionData, error: sessionError } = await supabase().auth.setSession({
       access_token: data.access_token,

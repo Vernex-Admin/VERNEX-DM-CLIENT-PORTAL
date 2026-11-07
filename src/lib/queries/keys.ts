@@ -5,6 +5,7 @@ export const R = {
   session: 'session',
   clients: 'clients',
   clientUsers: 'client_users',
+  credentials: 'credentials',
   accountLead: 'account_lead',
   staff: 'staff',
   assignments: 'assignments',

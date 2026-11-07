@@ -42,8 +42,18 @@ import {
 } from './store'
 import { mockAgreements } from './agreements'
 import { mockInvoiceSettings, mockInvoices } from './invoices'
+import { cleanDetails, columnsFromDetails, detailFieldsOf, fieldsError, validateDetails } from '../../lib/clientDetails'
+import { LOGIN_CODE, nextClientCode, nextLoginCode, passwordError } from '../../lib/credentials'
 
 const isClientUser = (profile: Profile) => profile.role === 'client_admin' || profile.role === 'client_member'
+
+function findClient(id: string): Client {
+  const client = db.clients.find((row) => row.id === id)
+  if (!client) throw new DataError('not_found', `No client ${id}`)
+  return client
+}
+
+const INVALID_LOGIN = 'Invalid Client Code or password. Try again.'
 
 function insertClient(input: ClientInsert, profile: Profile): Client {
   const client: Client = {
@@ -58,6 +68,13 @@ function insertClient(input: ClientInsert, profile: Profile): Client {
     ...input,
     service_type: input.service_type ?? null,
     onboarding_answers: input.onboarding_answers ?? null,
+    detail_fields: input.detail_fields ?? null,
+    details: input.details ?? null,
+    details_submitted_at: null,
+    details_locked_at: null,
+    details_locked_by: null,
+    // The system assigns the code; whatever the caller sent is ignored.
+    client_code: nextClientCode(db.clients.map((row) => row.client_code)),
     id: newId(),
     created_at: nowIso(),
   }
@@ -280,9 +297,25 @@ export const mockData: DataLayer = {
         const profile = currentProfile()
         return profile ? toSession(profile) : null
       }),
-    signInWithIdentifier: () =>
+    // Same rules as the login-with-identifier Edge Function: clients sign in with their login code
+    // and password only; an email works for Vernex staff only. The mock keeps no staff passwords,
+    // so any password is accepted for a staff email.
+    signInWithIdentifier: ({ identifier, password }) =>
       run(() => {
-        throw new DataError('forbidden', 'Identifier sign-in requires the Supabase auth service.')
+        const value = identifier.trim()
+        if (!password) throw new DataError('invalid', 'Enter your password.')
+        if (value.includes('@')) {
+          const profile = profileByEmail(value)
+          if (!profile || profile.client_id !== null) throw new DataError('invalid', INVALID_LOGIN)
+          setCurrentProfileId(profile.id)
+          return toSession(profile)
+        }
+        const code = value.toUpperCase()
+        const credential = db.client_credentials.find((row) => row.login_code === code)
+        const profile = db.profiles.find((row) => row.id === credential?.profile_id && row.is_active)
+        if (!credential || !profile || credential.password !== password) throw new DataError('invalid', INVALID_LOGIN)
+        setCurrentProfileId(profile.id)
+        return toSession(profile)
       }),
     signInWithPassword: ({ email, password }) =>
       run(() => {
@@ -354,9 +387,53 @@ export const mockData: DataLayer = {
     update: (id, patch) =>
       run(() => {
         guard('client', 'edit', id)
-        const client = db.clients.find((row) => row.id === id)
-        if (!client) throw new DataError('not_found', `No client ${id}`)
-        return Object.assign(client, patch)
+        const client = findClient(id)
+        // The Client Code is the client's sign-in: it never changes.
+        const { client_code: _code, ...rest } = patch
+        return Object.assign(client, rest)
+      }),
+    saveDetails: ({ client_id, values, submit = false }) =>
+      run(() => {
+        const profile = me()
+        const staff = !isClientUser(profile)
+        guard('client_details', staff ? 'edit' : 'submit', client_id)
+        const client = findClient(client_id)
+        if (!staff && client.details_locked_at) {
+          throw new DataError('forbidden', 'Vernex has locked your details. Ask your account manager to change anything.')
+        }
+        const fields = detailFieldsOf(client)
+        const errors = validateDetails(fields, values, submit && !staff)
+        const first = Object.values(errors)[0]
+        if (first) throw new DataError('invalid', first)
+        const clean = cleanDetails(fields, values)
+        // Answers to fields that are no longer on the form are kept, so nothing is lost if Vernex
+        // puts a field back.
+        const kept = Object.fromEntries(
+          Object.entries(client.details ?? {}).filter(([key]) => !fields.some((item) => item.key === key)),
+        )
+        client.details = { ...kept, ...clean }
+        Object.assign(client, columnsFromDetails(clean))
+        if (submit && !staff) client.details_submitted_at = nowIso()
+        return client
+      }),
+    setDetailFields: (clientId, fields) =>
+      run(() => {
+        guard('client_details', 'edit', clientId)
+        const client = findClient(clientId)
+        if (fields) {
+          const error = fieldsError(fields)
+          if (error) throw new DataError('invalid', error)
+        }
+        client.detail_fields = fields ? fields.map((item) => ({ ...item, label: item.label.trim(), section: item.section.trim() || 'Other' })) : null
+        return client
+      }),
+    setDetailsLocked: (clientId, locked) =>
+      run(() => {
+        const profile = guard('client_details', 'lock', clientId)
+        const client = findClient(clientId)
+        client.details_locked_at = locked ? nowIso() : null
+        client.details_locked_by = locked ? profile.id : null
+        return client
       }),
     remove: (id) =>
       run(() => {
@@ -366,6 +443,7 @@ export const mockData: DataLayer = {
         removeWhere(db.invoice_events, (row) => invoiceIds.has(row.invoice_id))
         removeWhere(db.clients, (row) => row.id === id)
         removeWhere(db.profiles, (row) => row.client_id === id)
+        removeWhere(db.client_credentials, (row) => row.client_id === id)
         const tenantTables = [
           db.client_assignments,
           db.projects,
@@ -446,6 +524,7 @@ export const mockData: DataLayer = {
           can_approve: false,
           is_active: true,
           notification_prefs: { ...DEFAULT_PREFS },
+          login_code: null,
           created_at: nowIso(),
         }
         db.profiles.push(profile)
@@ -501,6 +580,8 @@ export const mockData: DataLayer = {
           is_active: true,
           notification_prefs: { ...DEFAULT_PREFS },
           ...input,
+          // A login code only comes with a login (access.issue).
+          login_code: null,
           id: newId(),
           created_at: nowIso(),
         }
@@ -526,7 +607,9 @@ export const mockData: DataLayer = {
         if (patch.role && patch.role !== 'client_admin' && patch.role !== 'client_member') {
           throw new DataError('invalid', 'A client user must be a client admin or a client member.')
         }
-        return Object.assign(profile, patch)
+        // Login codes only change with the login itself (access.issue).
+        const { login_code: _code, ...rest } = patch
+        return Object.assign(profile, rest)
       }),
     remove: (id) =>
       run(() => {
@@ -534,6 +617,47 @@ export const mockData: DataLayer = {
         guard('client_user', 'delete', profile?.client_id ?? undefined)
         if (!profile || profile.client_id === null) throw new DataError('not_found', `No client user ${id}`)
         removeWhere(db.profiles, (row) => row.id === id)
+        removeWhere(db.client_credentials, (row) => row.profile_id === id)
+      }),
+  },
+
+  access: {
+    list: () =>
+      run(() => {
+        const ids = visibleClientIds(guard('client_access', 'view'))
+        return db.client_credentials.filter((row) => ids.has(row.client_id))
+      }),
+    issue: ({ profile_id, password }) =>
+      run(() => {
+        const profile = db.profiles.find((row) => row.id === profile_id)
+        guard('client_access', 'edit', profile?.client_id ?? undefined)
+        if (!profile || profile.client_id === null) throw new DataError('not_found', 'Only client users sign in with a Client Code.')
+        const problem = passwordError(password)
+        if (problem) throw new DataError('invalid', problem)
+        const client = findClient(profile.client_id)
+        let credential = db.client_credentials.find((row) => row.profile_id === profile.id)
+        if (!credential) {
+          const taken = db.client_credentials.map((row) => row.login_code)
+          const login_code = nextLoginCode(client.client_code, taken)
+          if (!LOGIN_CODE.test(login_code)) throw new DataError('invalid', 'This client has no valid Client Code.')
+          credential = { profile_id: profile.id, client_id: client.id, login_code, password, set_by: 'vernex', updated_at: nowIso() }
+          db.client_credentials.push(credential)
+          profile.login_code = login_code
+        } else {
+          Object.assign(credential, { password, set_by: 'vernex' as const, updated_at: nowIso() })
+        }
+        return credential
+      }),
+    changeMyPassword: ({ current_password, new_password }) =>
+      run(() => {
+        const profile = guard('own_password', 'edit')
+        const credential = db.client_credentials.find((row) => row.profile_id === profile.id)
+        if (!credential) throw new DataError('invalid', 'Your login is managed by Vernex. Ask your account manager.')
+        if (credential.password !== current_password) throw new DataError('invalid', 'Your current password is not correct.')
+        const problem = passwordError(new_password)
+        if (problem) throw new DataError('invalid', problem)
+        if (new_password === current_password) throw new DataError('invalid', 'Choose a password different from the current one.')
+        Object.assign(credential, { password: new_password, set_by: 'client' as const, updated_at: nowIso() })
       }),
   },
 

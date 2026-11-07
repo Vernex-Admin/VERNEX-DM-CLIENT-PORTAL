@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1'
 import { buildAgreementPdf } from '../../../src/lib/agreementPdf.ts'
+import { appendClosingPage } from '../../../src/lib/agreementClosingPage.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,7 +37,7 @@ Deno.serve(async (request) => {
 
   const { data: profile } = await admin.from('profiles').select('id,user_id,role,client_id,full_name')
     .eq('user_id', authData.user.id).eq('is_active', true).maybeSingle()
-  let allowed = profile?.role === 'vernex_founder'
+  let allowed = profile?.role === 'vernex_founder' || profile?.role === 'vernex_finance'
     || (profile?.client_id === agreement.client_id && (profile?.role === 'client_admin' || profile?.role === 'client_member'))
   if (profile?.role === 'vernex_pm') {
     const { data: assignment } = await admin.from('client_assignments').select('client_id')
@@ -57,42 +57,24 @@ Deno.serve(async (request) => {
     const founderProfile = await admin.from('profiles').select('full_name').eq('user_id', agreement.founder_user_id).maybeSingle()
     const clientProfile = await admin.from('profiles').select('full_name').eq('user_id', agreement.client_user_id).maybeSingle()
     const clientSignature = await downloadSignature(agreement.client_signature_path)
-    const logo = await Deno.readFile(new URL('./vernex-digital-marketing.png', import.meta.url))
-    const bodyPdf = buildAgreementPdf({
+    // The same builder and closing page as the admin preview, so the signed PDF matches it exactly.
+    const letterhead = await Deno.readFile(new URL('./agreement-letterhead.pdf', import.meta.url))
+    const closingPage = await Deno.readFile(new URL('./vernex-agreement-closing-page.pdf', import.meta.url))
+    const contentClientName = agreement.signed_content?.clientName || clientProfile.data?.full_name || 'Client'
+    const bodyPdf = await buildAgreementPdf({
       ...agreement,
       founderName: founderProfile.data?.full_name || profile?.full_name || 'Vernex Founder',
-      clientName: agreement.signed_content?.clientName || clientProfile.data?.full_name || 'Client',
-      logo,
+      clientName: contentClientName,
+      letterhead,
+      trailingPages: 1,
     })
-    const document = await PDFDocument.load(bodyPdf)
-    const closingTemplate = await PDFDocument.load(await Deno.readFile(new URL('./vernex-agreement-closing-page.pdf', import.meta.url)))
-    const [closingPage] = await document.copyPages(closingTemplate, [0])
-    document.addPage(closingPage)
-    const pageWidth = closingPage.getWidth()
-    const scale = pageWidth / 595.5
-    const regularFont = await document.embedFont(StandardFonts.Helvetica)
-    const boldFont = await document.embedFont(StandardFonts.HelveticaBold)
-    const isPng = clientSignature[0] === 137 && clientSignature[1] === 80
-    const signature = isPng ? await document.embedPng(clientSignature) : await document.embedJpg(clientSignature)
-    const signatureSize = signature.scale(Math.min((155 * scale) / signature.width, (48 * scale) / signature.height))
-    closingPage.drawImage(signature, { x: 290 * scale, y: 151 * scale, width: signatureSize.width, height: signatureSize.height })
-    const contentClientName = agreement.signed_content?.clientName || clientProfile.data?.full_name || 'Client'
-    closingPage.drawRectangle({ x: 374 * scale, y: 126 * scale, width: 151 * scale, height: 19 * scale, color: rgb(1, 1, 1) })
-    const nameWidth = regularFont.widthOfTextAtSize(contentClientName, 8.1)
-    const nameSize = Math.max(5.5, Math.min(8.1, (146 / Math.max(nameWidth, 1)) * 8.1)) * scale
-    closingPage.drawText(contentClientName, { x: 376 * scale, y: 132 * scale, size: nameSize, font: regularFont, color: rgb(0.08, 0.08, 0.08) })
-    const clientTime = new Intl.DateTimeFormat('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
-      hour12: true, timeZone: agreement.client_timezone, timeZoneName: 'short',
-    }).format(new Date(agreement.client_signed_at))
-    const timestamp = `Client signed at: ${clientTime} (${agreement.client_timezone})`
-    for (const x of [55, 298]) {
-      closingPage.drawText(timestamp, {
-        x: x * scale, y: 66 * scale, size: 6.1 * scale, font: boldFont,
-        color: rgb(0.08, 0.08, 0.08), maxWidth: 245 * scale, lineHeight: 7.1 * scale,
-      })
-    }
-    const pdf = await document.save()
+    const pdf = await appendClosingPage(bodyPdf, closingPage, {
+      name: contentClientName,
+      signature: clientSignature,
+      signedAt: agreement.client_signed_at,
+      timeZone: agreement.client_timezone,
+      founderSignedAt: agreement.founder_signed_at,
+    })
     const path = `agreements/${agreement.id}/final.pdf`
     const { error: uploadError } = await admin.storage.from('agreements').upload(path, pdf, {
       contentType: 'application/pdf',

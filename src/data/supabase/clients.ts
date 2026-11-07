@@ -35,7 +35,35 @@ export const clients: ClientsRepo = {
   },
 
   update: (id, patch) =>
-    row<Client>(supabase().from('clients').update(cleanPatch(patch)).eq('id', id).select().single(), NOT_FOUND),
+    row<Client>(
+      supabase()
+        .from('clients')
+        // The code is fixed (a trigger refuses changes); the details have their own functions.
+        .update(cleanPatch(patch, ['client_code', 'details', 'details_submitted_at', 'details_locked_at', 'details_locked_by']))
+        .eq('id', id)
+        .select()
+        .single(),
+      NOT_FOUND,
+    ),
+
+  async saveDetails({ client_id, values, submit = false }) {
+    const { data, error } = await supabase().rpc('save_client_details', {
+      p_client_id: client_id,
+      p_values: values,
+      p_submit: submit,
+    })
+    if (error) throw toDataError(error)
+    return data as Client
+  },
+
+  setDetailFields: (clientId, fields) =>
+    row<Client>(supabase().from('clients').update({ detail_fields: fields }).eq('id', clientId).select().single(), NOT_FOUND),
+
+  async setDetailsLocked(clientId, locked) {
+    const { data, error } = await supabase().rpc('set_client_details_lock', { p_client_id: clientId, p_locked: locked })
+    if (error) throw toDataError(error)
+    return data as Client
+  },
 
   async remove(id) {
     const person = await requireProfile()

@@ -239,8 +239,3 @@ export function useImportSocialMetrics() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.all(R.socialMetrics) }),
   })
 }
-
-/** Staff only. */
-export function useLeads() {
-  return useQuery({ queryKey: keys.list(R.leads), queryFn: () => data.leads.list() })
-}

@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { PDFArray, PDFDocument, PDFRawStream, decodePDFRawStream } from 'pdf-lib'
 import { DataError } from '../types'
 import { SEED_IDS } from './seed'
 import { db, resetMockData, setCurrentProfileId } from './store'
 import { mockAgreements } from './agreements'
 import type { AgreementContent } from '../../types/agreement'
+
+/** The words drawn on every page, joined with spaces. pdf-lib writes each as a hex string. */
+async function pdfText(bytes: Uint8Array) {
+  const pdf = await PDFDocument.load(bytes)
+  const words: string[] = []
+  for (const page of pdf.getPages()) {
+    const contents = page.node.Contents()
+    const streams = contents instanceof PDFArray ? contents.asArray().map((ref) => pdf.context.lookup(ref)) : [contents]
+    for (const stream of streams) {
+      if (!(stream instanceof PDFRawStream)) continue
+      const source = new TextDecoder('latin1').decode(decodePDFRawStream(stream).decode())
+      for (const [, hex] of source.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) {
+        words.push(String.fromCharCode(...(hex as string).match(/../g)!.map((pair) => parseInt(pair, 16))))
+      }
+    }
+  }
+  return { pdf, text: words.join(' ') }
+}
 
 const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
 const content: AgreementContent = {
@@ -63,13 +82,14 @@ describe('agreement signing workflow', () => {
     const signed = await mockAgreements.clientSign(sent.id, jpeg, true, 'Asia/Kolkata')
     const link = await mockAgreements.generateFinalPdf(signed.id)
     expect(link).toMatch(/^data:application\/pdf;base64,/)
-    const pdf = atob(link.split(',')[1] as string)
-    expect(pdf.startsWith('%PDF-1.4')).toBe(true)
-    expect(pdf).toContain('Portal Refresh Agreement')
-    expect(pdf).toContain('BOSS ANANDAA')
-    expect(pdf).toContain('AGK Signer')
-    expect(pdf).not.toContain('Signed \\(UTC\\):')
-    expect(pdf).toContain('INR 8,000')
+    const bytes = Uint8Array.from(atob(link.split(',')[1] as string), (char) => char.charCodeAt(0))
+    const { pdf, text } = await pdfText(bytes)
+    expect(pdf.getTitle()).toBe('Portal Refresh Agreement')
+    expect(text).toContain('PORTAL REFRESH AGREEMENT')
+    expect(text).toContain('BOSS ANANDAA')
+    expect(text).toContain('AGK Signer')
+    expect(text).not.toContain('Signed (UTC):')
+    expect(text).toContain('INR 8,000')
     expect(db.agreements[0]?.signed_pdf_path).toContain('final.pdf')
   })
 

@@ -279,6 +279,22 @@ export function DetailsPanel(props: {
       </Section>
 
       <Section title="Branding">
+        <Field label="Invoice Title" hint="Edit title or leave blank to remove">
+          <Input
+            value={document.title !== undefined ? document.title : 'INVOICE'}
+            disabled={locked}
+            onChange={(event) => setDocument((d) => ({ ...d, title: event.target.value }))}
+            placeholder="INVOICE"
+          />
+        </Field>
+        <Field label="Invoice Subtitle" hint="Edit subtitle or leave blank to remove">
+          <Input
+            value={document.subtitle !== undefined ? document.subtitle : 'DIGITAL MARKETING SERVICES'}
+            disabled={locked}
+            onChange={(event) => setDocument((d) => ({ ...d, subtitle: event.target.value }))}
+            placeholder="DIGITAL MARKETING SERVICES"
+          />
+        </Field>
         <ImagePicker
           kind="logo"
           label="Logo"

@@ -1,5 +1,6 @@
 import type { Agreement, AgreementEvent, AgreementTemplate } from '../../types/db'
-import { buildAgreementPdf } from '../../lib/agreementPdf'
+import { buildAgreementPdf, LETTERHEAD_URL } from '../../lib/agreementPdf'
+import { can } from '../../lib/permissions'
 import { DataError } from '../types'
 import type { AgreementsRepo } from '../types'
 import { currentProfile, db, guard, newId, nowIso, run, visibleClientIds } from './store'
@@ -92,7 +93,7 @@ export const mockAgreements: AgreementsRepo = {
   },
   createDraft(input) {
     return run(() => {
-      guard('document', 'create', input.client_id)
+      guard('agreement', 'create', input.client_id)
       const profile = currentProfile()
       if (!profile || !input.title.trim()) throw new DataError('invalid', 'Choose a client and enter an agreement title.')
       if (input.template_id && !db.agreement_templates.some((t) => t.id === input.template_id && t.is_active)) {
@@ -115,7 +116,7 @@ export const mockAgreements: AgreementsRepo = {
   updateDraft(id, input) {
     return run(() => {
       const agreement = readAgreement(id)
-      guard('document', 'edit', agreement.client_id)
+      guard('agreement', 'edit', agreement.client_id)
       if (agreement.status !== 'draft') throw new DataError('forbidden', 'Only a draft agreement can be edited.')
       agreement.title = input.title.trim()
       agreement.content = structuredClone(input.content)
@@ -128,7 +129,7 @@ export const mockAgreements: AgreementsRepo = {
   requestFounderSignature(id) {
     return run(() => {
       const agreement = readAgreement(id)
-      guard('document', 'edit', agreement.client_id)
+      guard('agreement', 'edit', agreement.client_id)
       if (agreement.status !== 'draft') throw new DataError('forbidden', 'Only a draft can be submitted for signature.')
       agreement.status = 'awaiting_founder_signature'
       agreement.updated_at = nowIso()
@@ -141,7 +142,7 @@ export const mockAgreements: AgreementsRepo = {
     return run(() => {
       const agreement = readAgreement(id)
       const profile = currentProfile()
-      if (profile?.role !== 'vernex_founder') throw new DataError('forbidden', 'Only the founder can sign and send agreements.')
+      if (!profile || !can(profile, 'agreement', 'approve')) throw new DataError('forbidden', 'Only the founder can sign and send agreements.')
       if (agreement.status !== 'awaiting_founder_signature') throw new DataError('forbidden', 'Agreement is not awaiting founder signature.')
       const now = nowIso()
       agreement.status = 'awaiting_client_signature'
@@ -182,7 +183,7 @@ export const mockAgreements: AgreementsRepo = {
   cancel(id) {
     return run(() => {
       const agreement = readAgreement(id)
-      guard('document', 'edit', agreement.client_id)
+      guard('agreement', 'edit', agreement.client_id)
       if (!['draft', 'awaiting_founder_signature', 'awaiting_client_signature'].includes(agreement.status)) {
         throw new DataError('forbidden', 'This agreement cannot be cancelled.')
       }
@@ -198,26 +199,30 @@ export const mockAgreements: AgreementsRepo = {
     })
   },
   async generateFinalPdf(id) {
-    const { bytes, clientName, clientSignature, clientSignedAt, clientTimeZone } = await run(() => {
+    const { input, clientName, clientSignature, clientSignedAt, clientTimeZone, founderSignedAt } = await run(() => {
       const agreement = readAgreement(id)
       if (agreement.status !== 'signed' || !agreement.signed_content) throw new DataError('forbidden', 'Only a signed agreement can be downloaded.')
       const founder = db.profiles.find((profile) => profile.id === agreement.founder_user_id)
       const clientUser = db.profiles.find((profile) => profile.id === agreement.client_user_id)
-      const bytes = buildAgreementPdf({
-        ...agreement,
-        founderName: founder?.full_name ?? 'Vernex Founder',
-        clientName: clientUser?.full_name ?? agreement.signed_content.clientName,
-      })
       return {
-        bytes,
+        input: {
+          ...agreement,
+          founderName: founder?.full_name ?? 'Vernex Founder',
+          clientName: clientUser?.full_name ?? agreement.signed_content.clientName,
+        },
+        founderSignedAt: agreement.founder_signed_at,
         clientName: agreement.signed_content.clientName || clientUser?.full_name || 'Client',
         clientSignature: bytesFromDataUrl(agreement.client_signature_url),
         clientSignedAt: agreement.client_signed_at,
         clientTimeZone: agreement.client_timezone,
       }
     })
+    const inBrowser = typeof window !== 'undefined'
+    // The letterhead is a public file; under test there is no server to fetch it from.
+    const letterhead = inBrowser ? await fetch(LETTERHEAD_URL).then(async (response) => (response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined)).catch(() => undefined) : undefined
+    const bytes = await buildAgreementPdf({ ...input, letterhead, trailingPages: inBrowser ? 1 : 0 })
     let finalBytes = bytes
-    if (typeof window !== 'undefined') {
+    if (inBrowser) {
       const response = await fetch('/vernex-agreement-closing-page.pdf')
       if (!response.ok) throw new DataError('invalid', 'The shared agreement closing page could not be loaded.')
       const { appendClosingPage } = await import('../../lib/agreementClosingPage')
@@ -227,6 +232,7 @@ export const mockAgreements: AgreementsRepo = {
         signature: clientSignature,
         signedAt: clientSignedAt,
         timeZone: clientTimeZone,
+        founderSignedAt,
       })
     }
     const link = dataUrl(finalBytes, 'application/pdf')

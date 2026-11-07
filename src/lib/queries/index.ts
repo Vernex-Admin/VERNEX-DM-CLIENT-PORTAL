@@ -1,4 +1,5 @@
 // The only data entry point for screens. Do not import src/data from a page or component.
+export * from './access'
 export * from './activity'
 export * from './agreements'
 export * from './admin'
@@ -18,7 +19,9 @@ export type {
   AgreementDraftInput,
   AgreementTemplateInput,
   BrandAssetUpload,
+  ClientDetailsSave,
   ClientFilter,
+  IssueLogin,
   CommentFilter,
   CommentInput,
   DataErrorCode,

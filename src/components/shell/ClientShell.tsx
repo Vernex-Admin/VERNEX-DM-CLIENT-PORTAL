@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, CheckSquare, CircleCheck, Ellipsis, FolderOpen, House, LayoutDashboard, LineChart, MessageSquarePlus, Receipt, User, Mail } from 'lucide-react'
+import { Bell, CheckSquare, CircleCheck, ClipboardList, Ellipsis, FolderOpen, House, LayoutDashboard, LineChart, MessageSquarePlus, Receipt, User, Mail } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { cn } from '../../lib/cn'
@@ -13,6 +13,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean }
 const SIDEBAR: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/setup', label: 'Setup', icon: CheckSquare },
+  { to: '/details', label: 'My details', icon: ClipboardList },
   { to: '/approvals', label: 'Approvals', icon: CircleCheck },
   { to: '/requests', label: 'Requests', icon: MessageSquarePlus },
   { to: '/vault', label: 'Vault', icon: FolderOpen },
@@ -28,6 +29,7 @@ const TABS: NavItem[] = [
   { to: '/billing', label: 'Billing', icon: Receipt },
 ]
 const MORE: NavItem[] = [
+  { to: '/details', label: 'My details', icon: ClipboardList },
   { to: '/setup', label: 'Setup', icon: CheckSquare },
   { to: '/requests', label: 'Requests', icon: MessageSquarePlus },
   { to: '/performance', label: 'Performance', icon: LineChart },

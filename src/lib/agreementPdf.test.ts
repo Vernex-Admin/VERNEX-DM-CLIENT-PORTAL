@@ -17,60 +17,71 @@ const signed = {
   founder_user_id: 'founder-auth-id', client_user_id: 'client-auth-id',
   founderName: 'Vernex Founder', clientName: 'Alex Developer',
 }
-const raw = (value: Uint8Array) => new TextDecoder('latin1').decode(value)
+const longContent: AgreementContent = {
+  ...content,
+  startDate: '2026-11-01',
+  paymentTerms: '₹15,000 per month, payable in advance.',
+  clauses: Array.from({ length: 22 }, (_, index) => ({
+    id: `clause-${index + 1}`, number: index + 1, title: `Long clause ${index + 1}`,
+    body: `Developer ${index + 1} delivery responsibilities, review terms, and “detailed” acceptance conditions. `.repeat(18),
+  })),
+}
+const isA4 = (page: { getWidth(): number; getHeight(): number }) =>
+  Math.abs(page.getWidth() - 595.28) < 0.01 && Math.abs(page.getHeight() - 841.89) < 0.01
 
-describe('A4 agreement PDF pagination', () => {
-  it('creates a single A4 body page when optional details are empty', () => {
-    const pdf = raw(buildAgreementPdf(signed))
-    expect(pdf).toContain('/MediaBox [0 0 595.28 841.89]')
-    expect(pdf).toContain('/Count 1')
-    expect(pdf).toContain('Alex Developer')
+describe('A4 agreement PDF', () => {
+  it('creates a single A4 body page when optional details are empty', async () => {
+    const pdf = await PDFDocument.load(await buildAgreementPdf(signed))
+    expect(pdf.getPageCount()).toBe(1)
+    expect(isA4(pdf.getPage(0))).toBe(true)
+    expect(pdf.getTitle()).toBe('Portal Refresh Agreement')
   })
 
-  it('flows many long clauses across A4 body pages', () => {
-    const longContent = {
-      ...content,
-      clauses: Array.from({ length: 22 }, (_, index) => ({
-        id: `clause-${index + 1}`, number: index + 1, title: `Long clause ${index + 1}`,
-        body: `Developer ${index + 1} delivery responsibilities, review terms, and detailed acceptance conditions. `.repeat(18),
-      })),
-    }
-    const pdf = raw(buildAgreementPdf({
-      ...signed,
-      signed_content: longContent,
-    }))
-    const pageCount = Number(pdf.match(/\/Count (\d+)/)?.[1])
-    expect(pageCount).toBeGreaterThan(2)
-    expect(pdf).toContain(`Page ${pageCount} of ${pageCount}`)
-    expect(pdf).toContain('Long clause 22')
+  it('flows many long clauses across A4 pages on the letterhead, and handles ₹ and curly quotes', async () => {
+    const letterhead = new Uint8Array(await readFile('public/templates/AGREEMENT_TEMPLATE.pdf'))
+    const plain = await PDFDocument.load(await buildAgreementPdf({ ...signed, signed_content: longContent }))
+    const onLetterhead = await PDFDocument.load(await buildAgreementPdf({ ...signed, signed_content: longContent, letterhead }))
+    expect(plain.getPageCount()).toBeGreaterThan(2)
+    // The letterhead never changes where the text breaks.
+    expect(onLetterhead.getPageCount()).toBe(plain.getPageCount())
+    expect(onLetterhead.getPages().every(isA4)).toBe(true)
   })
 
-  it('appends the supplied vector closing page last with the client name, signature, and client-local time', async () => {
-    const longContent = {
+  it('embeds a custom uploaded logo and accepts a removed tagline', async () => {
+    const [letterhead, logo] = await Promise.all([
+      readFile('public/templates/AGREEMENT_TEMPLATE.pdf'),
+      readFile('public/vernex-logo.jpg'),
+    ])
+    const branded = {
       ...content,
-      clauses: Array.from({ length: 22 }, (_, index) => ({
-        id: `clause-${index + 1}`, number: index + 1, title: `Long clause ${index + 1}`,
-        body: `Developer ${index + 1} delivery responsibilities, review terms, and acceptance conditions. `.repeat(18),
-      })),
+      logoUrl: `data:image/jpeg;base64,${logo.toString('base64')}`,
+      tagline: '',
     }
+    const pdf = await buildAgreementPdf({ ...signed, signed_content: branded, letterhead })
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1)
+  })
+
+  it('appends the fixed closing page last, untouched until the client signs', async () => {
     const [body, template, clientSignature] = await Promise.all([
-      Promise.resolve(buildAgreementPdf({ ...signed, signed_content: longContent })),
+      buildAgreementPdf({ ...signed, signed_content: longContent, trailingPages: 1 }),
       readFile('public/vernex-agreement-closing-page.pdf'),
       readFile('public/vernex-founder-signature.png'),
     ])
-    const finalPdf = await appendClosingPage(body, template, {
+    const bodyPages = (await PDFDocument.load(body)).getPageCount()
+
+    const unsigned = await PDFDocument.load(await appendClosingPage(body, template, { name: 'Alex Client Representative' }))
+    const finalPdf = await PDFDocument.load(await appendClosingPage(body, template, {
       name: 'Alex Client Representative', signature: clientSignature,
-      signedAt: '2026-10-21T11:00:00.000Z', timeZone: 'Asia/Kolkata',
-    })
-    const generated = await PDFDocument.load(finalPdf)
-    const lastPage = generated.getPage(generated.getPageCount() - 1)
-    expect(generated.getPageCount()).toBeGreaterThan(2)
-    expect(generated.getPageCount()).toBe(Number(raw(body).match(/\/Count (\d+)/)?.[1]) + 1)
-    expect(generated.getPages().every((page) =>
-      Math.abs(page.getWidth() - 595.28) < 0.01 && Math.abs(page.getHeight() - 841.89) < 0.01,
-    )).toBe(true)
-    expect(lastPage.getWidth()).toBeCloseTo(595.28, 2)
-    expect(lastPage.getHeight()).toBeCloseTo(841.89, 2)
-    expect(generated.getPages().at(-1)?.node.Contents()).toBeDefined()
+      signedAt: '2026-10-21T11:00:00.000Z', timeZone: 'Asia/Kolkata', founderSignedAt: '2026-10-21T10:00:00.000Z',
+    }))
+
+    for (const pdf of [unsigned, finalPdf]) {
+      expect(pdf.getPageCount()).toBe(bodyPages + 1)
+      expect(pdf.getPages().every(isA4)).toBe(true)
+    }
+    // Signing adds the signature, name and dates on top of the artwork; unsigned adds nothing.
+    const fontsOf = (pdf: PDFDocument) => pdf.getPages().at(-1)?.node.Resources()?.toString() ?? ''
+    expect(fontsOf(unsigned)).not.toContain('Helvetica')
+    expect(fontsOf(finalPdf)).toContain('/Font')
   })
 })

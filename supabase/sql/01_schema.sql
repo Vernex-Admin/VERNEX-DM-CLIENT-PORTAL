@@ -38,7 +38,7 @@ create table public.profiles (
   full_name          text not null default '',
   phone_e164         text,
   avatar_url         text,
-  role               text not null check (role in ('vernex_founder', 'vernex_pm', 'client_admin', 'client_member')),
+  role               text not null check (role in ('vernex_founder', 'vernex_pm', 'vernex_finance', 'client_admin', 'client_member')),
   can_approve        boolean not null default false,
   is_active          boolean not null default true,
   notification_prefs jsonb not null default
@@ -46,7 +46,7 @@ create table public.profiles (
   created_at         timestamptz not null default now(),
   constraint profiles_role_client check (
     (role in ('client_admin', 'client_member') and client_id is not null)
-    or (role in ('vernex_founder', 'vernex_pm') and client_id is null)
+    or (role in ('vernex_founder', 'vernex_pm', 'vernex_finance') and client_id is null)
   )
 );
 create unique index profiles_email_key on public.profiles (lower(email));

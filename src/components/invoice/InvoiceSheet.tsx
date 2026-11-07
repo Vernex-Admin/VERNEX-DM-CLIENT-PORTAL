@@ -151,8 +151,20 @@ function sheetParts({ document, meta, images, stamp, edit }: InvoiceSheetProps) 
 
       <section className="ivx-title-row">
         <div>
-          <h1 className="ivx-title">INVOICE</h1>
-          <p className="ivx-subtitle">DIGITAL MARKETING SERVICES</p>
+          <h1 className="ivx-title">
+            {text(
+              document.title !== undefined ? document.title : 'INVOICE',
+              'Invoice title',
+              (value) => set?.((d) => ({ ...d, title: value })),
+            )}
+          </h1>
+          <p className="ivx-subtitle">
+            {text(
+              document.subtitle !== undefined ? document.subtitle : 'DIGITAL MARKETING SERVICES',
+              'Invoice subtitle',
+              (value) => set?.((d) => ({ ...d, subtitle: value })),
+            )}
+          </p>
         </div>
         <dl className="ivx-meta">
           <Row label="Invoice Number">
@@ -236,7 +248,7 @@ function sheetParts({ document, meta, images, stamp, edit }: InvoiceSheetProps) 
   /** The heading on every page after the first. */
   const continued = () => (
     <div className="ivx-continued" data-measure="continued">
-      <span className="ivx-continued-title">INVOICE</span>
+      <span className="ivx-continued-title">{document.title !== undefined ? document.title : 'INVOICE'}</span>
       <span>{meta.number ? `${meta.number} · continued` : 'Continued'}</span>
     </div>
   )
