@@ -3,8 +3,10 @@ import { ArrowLeft, ArrowRight, Ban, FileText, Plus, Printer, Save, Send, Trash2
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { PDFDocument } from 'pdf-lib'
 import { Icon } from '../../../components/Icon'
+import { SendToClient } from '../../../components/SendToClient'
 import { Button, Card, CardBody, Field, Input, Select, useToast } from '../../../components/ui'
 import { useCan } from '../../../lib/permissions'
+import { GENTECH_CLAUSES, useGentechBrand } from '../../../lib/brand'
 import {
   useAgreementTemplates, useAgreements, useCancelAgreement, useClient, useClients,
   useAgreementEvents, useCreateAgreementDraft, useFounderSignAndSend, useGenerateFinalAgreementPdf, useRequestFounderSignature,
@@ -152,6 +154,8 @@ export default function AgreementPage() {
   const clientQuery = useClient(clientId || undefined)
   const client = clientQuery.data
 
+  const brand = useGentechBrand()
+
   // Form state
   const [projectTitle, setProjectTitle] = useState(
     () => params.get('title') || (client ? `${client.name.toUpperCase()} PROJECT` : 'VNX - SCHOOL ERP PROJECT'),
@@ -166,8 +170,8 @@ export default function AgreementPage() {
   const [developerName, setDeveloperName] = useState('Haran')
   const [companySigner, setCompanySigner] = useState('BOSS ANANDAA')
   const [companyTitle, setCompanyTitle] = useState('CEO & Founder')
-  const [companyName, setCompanyName] = useState('VerneX')
-  const [clauses, setClauses] = useState<Clause[]>(DEFAULT_CLAUSES)
+  const [companyName, setCompanyName] = useState(brand?.name ?? 'VerneX')
+  const [clauses, setClauses] = useState<Clause[]>(brand ? GENTECH_CLAUSES : DEFAULT_CLAUSES)
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [services, setServices] = useState('')
@@ -176,10 +180,10 @@ export default function AgreementPage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [templateId, setTemplateId] = useState('')
-  const [templateName, setTemplateName] = useState('Vernex Services Agreement')
+  const [templateName, setTemplateName] = useState(brand ? 'Vernex Gen Technologies Client Agreement' : 'Vernex Services Agreement')
   const [selectedAgreementId, setSelectedAgreementId] = useState('')
-  const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const [tagline, setTagline] = useState<string>('Crafting your digital narrative.')
+  const [logoUrl, setLogoUrl] = useState<string | null>(brand?.logoUrl ?? null)
+  const [tagline, setTagline] = useState<string>(brand ? '' : 'Crafting your digital narrative.')
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [zoomMode, setZoomMode] = useState<'fit-page' | '75' | '100' | 'fit-width'>('fit-page')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -197,7 +201,7 @@ export default function AgreementPage() {
     return {
       projectTitle, agreementDate, startDate, endDate, clientName, clientEmail, services, scope,
       paymentTerms, developerName, companyName, companySigner, companyTitle,
-      logoUrl, tagline,
+      logoUrl, tagline, letterhead: brand ?? undefined,
       clauses: structuredClone(clauses),
     }
   }
@@ -286,7 +290,7 @@ export default function AgreementPage() {
           signedAt: isSigned ? selectedAgreement?.client_signed_at : null,
           timeZone: isSigned ? selectedAgreement?.client_timezone : null,
           founderSignedAt: isSigned ? selectedAgreement?.founder_signed_at : null,
-        })
+        }, content.letterhead)
         const pdfBuffer = new ArrayBuffer(pdf.byteLength)
         new Uint8Array(pdfBuffer).set(pdf)
         nextUrl = URL.createObjectURL(new Blob([pdfBuffer], { type: 'application/pdf' }))
@@ -436,6 +440,22 @@ export default function AgreementPage() {
         </div>
       </div>
 
+      {brand && (
+        <SendToClient
+          subject={`Agreement: ${projectTitle} - Vernex Gen Technologies`}
+          message={`Hello ${clientName || developerName},
+
+Please find attached the agreement for ${projectTitle} from Vernex Gen Technologies.`}
+          download={() => {
+            if (!previewUrl) throw new Error('The agreement is still being prepared. Try again in a moment.')
+            const link = document.createElement('a')
+            link.href = previewUrl
+            link.download = `${projectTitle || 'Vernex Gen Technologies'} Agreement.pdf`
+            link.click()
+          }}
+        />
+      )}
+
       {/* Main split grid: Controls on left, Live Agreement Document on right */}
       <div className="agreement-editor-layout grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-12">
         {/* Left Control Panel (col-span-5) */}
@@ -461,19 +481,19 @@ export default function AgreementPage() {
                   setScope(content.scope)
                   setPaymentTerms(content.paymentTerms)
                   setDeveloperName(content.developerName)
-                  setCompanyName(content.companyName)
+                  setCompanyName(brand?.name ?? content.companyName)
                   setCompanySigner(content.companySigner)
                   setCompanyTitle(content.companyTitle)
-                  setLogoUrl(content.logoUrl ?? null)
-                  setTagline(content.tagline ?? 'Crafting your digital narrative.')
-                  setClauses(content.clauses.length ? content.clauses : DEFAULT_CLAUSES)
+                  setLogoUrl(brand?.logoUrl ?? content.logoUrl ?? null)
+                  setTagline(brand ? '' : content.tagline ?? 'Crafting your digital narrative.')
+                  setClauses(content.clauses.length ? content.clauses : brand ? GENTECH_CLAUSES : DEFAULT_CLAUSES)
                 }}>
                   <option value="">Start from current agreement</option>
                   {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </Select>
               </Field>
 
-              {!clientId && (
+              {!clientId && !brand && (
                 <Field label="Client">
                   <Select
                     value={clientId}
@@ -555,12 +575,12 @@ export default function AgreementPage() {
                           <Icon icon={Upload} size={13} />
                           {logoUrl ? 'Replace' : 'Upload Logo'}
                         </Button>
-                        {logoUrl !== null && (
+                        {logoUrl !== (brand?.logoUrl ?? null) && (
                           <Button
                             size="sm"
                             variant="ghost"
                             disabled={!editable}
-                            onClick={() => setLogoUrl(null)}
+                            onClick={() => setLogoUrl(brand?.logoUrl ?? null)}
                             className="text-xs"
                           >
                             Reset Default

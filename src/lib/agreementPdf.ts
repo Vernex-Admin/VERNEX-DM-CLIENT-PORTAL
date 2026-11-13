@@ -25,7 +25,10 @@ const PAGE_HEIGHT = 841.89
 // Measured on the letterhead: the header band ends 150pt from the top and the footer shape rises
 // 30pt from the bottom. The side margins line up with the text on the closing page.
 const MARGIN_X = 58
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_X * 2
+// Filing margin for Gen Technologies agreements. An A4 hole punch (ISO 838) makes 6mm holes
+// centred 12mm from the left edge, so they reach 15-16mm in. A 25mm left margin (70.9pt) keeps
+// every line about 9mm clear of the holes; the right margin stays at 58pt (20.5mm).
+const FILING_MARGIN_LEFT = (25 * 72) / 25.4
 const CONTENT_TOP = PAGE_HEIGHT - 150 - 30
 const CONTENT_BOTTOM = 72
 const FOOTER_Y = 40
@@ -48,10 +51,37 @@ function displayDate(value: string): string {
 }
 
 /** Characters the standard fonts cannot draw are replaced, so a stray symbol never breaks the PDF. */
+// Keyboard and copy-paste characters the standard fonts lack (narrow and zero-width spaces,
+// non-breaking hyphens, arrows, check marks, emoji), mapped to ones they have.
+const REPLACEMENTS: [RegExp, string][] = [
+  [/₹\s?/g, 'INR '],
+  [/\t/g, '    '],
+  [/\u200B|\u200C|\u200D|\u2060|\uFEFF|\uFE0E|\uFE0F/g, ''],
+  [/[\u2000-\u200A\u202F\u205F\u3000]/g, ' '],
+  [/[\u2010-\u2012\u2015\u2043\u2212]/g, '-'],
+  [/[\u201B\u2032]/g, "'"],
+  [/[\u201F\u2033]/g, '"'],
+  [/[\u2192\u2794\u27A1]/g, '->'],
+  [/\u2190/g, '<-'],
+  [/\u21D2/g, '=>'],
+  [/\u2265/g, '>='],
+  [/\u2264/g, '<='],
+  [/\u2260/g, '!='],
+  [/[\u2023\u2219\u25A0\u25AA\u25CF\u25E6\u2611\u2705\u2713\u2714\u30FB]/g, '•'],
+  [/\p{Extended_Pictographic}/gu, ''],
+]
+
+/** Characters the standard fonts cannot draw are mapped or simplified (ā -> a); only the rest become "?". */
 function printable(value: string, font: PDFFont): string {
   const supported = new Set(font.getCharacterSet())
-  return Array.from(value.replace(/₹\s?/g, 'INR ').replace(/\t/g, '    '))
-    .map((char) => (supported.has(char.codePointAt(0) as number) ? char : '?'))
+  const has = (text: string) => Array.from(text).every((char) => supported.has(char.codePointAt(0) as number))
+  const text = REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value)
+  return Array.from(text)
+    .map((char) => {
+      if (has(char)) return char
+      const plain = char.normalize('NFKD').replace(/[̀-ͯ]/g, '')
+      return plain && has(plain) ? plain : '?'
+    })
     .join('')
 }
 
@@ -101,12 +131,15 @@ type AgreementBranding = {
   customLogoImage?: PDFImage | null
   removeLogo?: boolean
   customTagline?: string | null
+  company?: { name: string; phone: string; website: string; email?: string }
 }
 
 class Writer {
   pages: PDFPage[] = []
   page!: PDFPage
   y = CONTENT_TOP
+  readonly left: number
+  readonly contentWidth: number
 
   constructor(
     private readonly document: PDFDocument,
@@ -114,6 +147,8 @@ class Writer {
     private readonly letterhead: PDFEmbeddedPage | null,
     private readonly branding?: AgreementBranding,
   ) {
+    this.left = branding?.company ? FILING_MARGIN_LEFT : MARGIN_X
+    this.contentWidth = PAGE_WIDTH - this.left - MARGIN_X
     this.newPage()
   }
 
@@ -130,6 +165,9 @@ class Writer {
   private applyLetterheadBranding() {
     if (!this.branding) return
     const BG_GREY = rgb(230 / 255, 231 / 255, 230 / 255)
+    const company = this.branding.company
+    // Another company's letterhead clears the whole left block (logo and tagline) first.
+    if (company) this.page.drawRectangle({ x: 28, y: 722, width: 272, height: 116, color: BG_GREY })
 
     // Handle logo override or removal
     if (this.branding.removeLogo || this.branding.customLogoImage) {
@@ -137,13 +175,13 @@ class Writer {
       this.page.drawRectangle({ x: 30, y: 765, width: 230, height: 72, color: BG_GREY })
       if (this.branding.customLogoImage) {
         const img = this.branding.customLogoImage
-        const maxW = 180
-        const maxH = 55
+        const maxW = company ? 200 : 180
+        const maxH = company ? 72 : 55
         const scale = Math.min(maxW / img.width, maxH / img.height, 1)
         const imgW = img.width * scale
         const imgH = img.height * scale
-        const imgX = 45
-        const imgY = 770 + (maxH - imgH) / 2
+        const imgX = company ? 52 : 45
+        const imgY = (company ? 742 : 770) + (maxH - imgH) / 2
         this.page.drawImage(img, { x: imgX, y: imgY, width: imgW, height: imgH })
       }
     }
@@ -151,7 +189,8 @@ class Writer {
     // Handle tagline override or removal
     if (this.branding.customTagline !== undefined && this.branding.customTagline !== null) {
       const trimmed = this.branding.customTagline.trim()
-      if (trimmed !== 'Crafting your digital narrative.') {
+      // With another company's letterhead the block is already clear; covering again would hide its logo.
+      if (trimmed !== 'Crafting your digital narrative.' && !(company && !trimmed)) {
         this.page.drawRectangle({ x: 30, y: 744, width: 230, height: 20, color: BG_GREY })
         if (trimmed) {
           const font = this.fonts.bold
@@ -165,6 +204,20 @@ class Writer {
           })
         }
       }
+    }
+
+    // Company name, phone and website on the right of the header band
+    if (company) {
+      this.page.drawRectangle({ x: 330, y: 730, width: 262, height: 85, color: BG_GREY })
+      const right = (text: string, y: number, size: number, bold: boolean) => {
+        const font = bold ? this.fonts.bold : this.fonts.regular
+        const value = printable(text, font)
+        this.page.drawText(value, { x: 571 - font.widthOfTextAtSize(value, size), y, size, font, color: rgb(0.05, 0.05, 0.05) })
+      }
+      right(company.name, 796, 13, true)
+      right(company.phone, 781, 10.5, false)
+      if (company.email) right(company.email, 766, 9, false)
+      right(company.website, 742, 11.5, true)
     }
   }
 
@@ -189,7 +242,7 @@ class Writer {
   ) {
     const { size = BODY, bold = false, indent = 0, align = 'left', color = INK, leading = size * 1.5, keep = 1 } = options
     const font = bold ? this.fonts.bold : this.fonts.regular
-    const width = CONTENT_WIDTH - indent
+    const width = this.contentWidth - indent
     const lines = this.lines(value, size, bold, width)
     // Keep the first `keep` lines together so a paragraph never starts with one line at a page foot.
     this.ensure(Math.min(keep, lines.length) * leading)
@@ -200,7 +253,7 @@ class Writer {
       const natural = line.words.reduce((sum, word) => sum + font.widthOfTextAtSize(word, size), 0)
       const gaps = line.words.length - 1
       const textWidth = natural + gaps * space
-      let x = MARGIN_X + indent
+      let x = this.left + indent
       if (align === 'center') x += (width - textWidth) / 2
       if (align === 'right') x += width - textWidth
       // Justified lines spread their spaces; a line that would gape (few long words) stays left aligned.
@@ -215,7 +268,7 @@ class Writer {
   }
 
   rule(width: number, color = GOLD, thickness = 0.8) {
-    const x = MARGIN_X + (CONTENT_WIDTH - width) / 2
+    const x = this.left + (this.contentWidth - width) / 2
     this.page.drawLine({ start: { x, y: this.y }, end: { x: x + width, y: this.y }, thickness, color })
   }
 }
@@ -266,24 +319,33 @@ export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8
     customLogoImage,
     removeLogo,
     customTagline: content.tagline !== undefined ? content.tagline : null,
+    company: content.letterhead,
   }
 
   const w = new Writer(document, fonts, letterhead, branding)
+  const gentech = Boolean(content.letterhead)
+  const clientParty = content.clientName.trim() || 'the Client'
   const fill = (body: string) =>
     body
-      .replace(/{{projectTitle}}/g, content.projectTitle)
+      .replace(/{{projectTitle}}/g, content.projectTitle.trim() || (gentech ? 'the Project' : ''))
       .replace(/{{developerName}}/g, content.developerName)
+      .replace(/{{clientName}}/g, clientParty)
       .replace(/{{companyName}}/g, content.companyName)
       .replace(/{{companySigner}}/g, content.companySigner)
 
-  // Title block.
-  w.text('DEVELOPER ENGAGEMENT & NON-OWNERSHIP AGREEMENT', { size: 13, bold: true, align: 'center', color: NAVY, leading: 18 })
+  // Title block. Gen Technologies agreements are between the company and its client.
+  w.text(gentech ? 'CLIENT SERVICE AGREEMENT' : 'DEVELOPER ENGAGEMENT & NON-OWNERSHIP AGREEMENT', { size: 13, bold: true, align: 'center', color: NAVY, leading: 18 })
   w.space(4)
   w.rule(110)
   w.space(14)
-  w.text(input.title.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
-  if (content.projectTitle.trim() && !input.title.toLowerCase().includes(content.projectTitle.trim().toLowerCase())) {
-    w.text(content.projectTitle, { size: 10, align: 'center', color: MUTED })
+  if (gentech) {
+    w.text(`${content.companyName} and ${clientParty}`.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
+    if (content.projectTitle.trim()) w.text(`Project: ${content.projectTitle.trim()}`, { size: 10, align: 'center', color: MUTED })
+  } else {
+    w.text(input.title.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
+    if (content.projectTitle.trim() && !input.title.toLowerCase().includes(content.projectTitle.trim().toLowerCase())) {
+      w.text(content.projectTitle, { size: 10, align: 'center', color: MUTED })
+    }
   }
   w.space(10)
   if (content.agreementDate.trim()) w.text(`Date: ${displayDate(content.agreementDate)}`, { size: 9.5, align: 'right', color: MUTED })
@@ -293,14 +355,16 @@ export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8
   w.text(`This Agreement is made on this ${displayDate(content.agreementDate)}, at Chennai, India, by and between:`, { align: 'justify' })
   w.space(4)
   w.text(
-    `${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "Company" (which includes its successors and assigns),`,
+    `${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "${gentech ? 'Service Provider' : 'Company'}" (which includes its successors and assigns),`,
     { indent: INDENT, align: 'justify', keep: 2 },
   )
   w.space(4)
   w.text('AND', { bold: true, align: 'center' })
   w.space(4)
   w.text(
-    `${content.clientName || content.developerName}, hereinafter referred to as the "Developer" (which expression shall include his heirs, legal representatives, and permitted assigns).`,
+    gentech
+      ? `${clientParty}, hereinafter referred to as the "Client" (which expression shall include its successors, legal representatives, and permitted assigns).`
+      : `${content.clientName || content.developerName}, hereinafter referred to as the "Developer" (which expression shall include his heirs, legal representatives, and permitted assigns).`,
     { indent: INDENT, align: 'justify', keep: 2 },
   )
   if (content.clientEmail.trim()) w.text(`Email: ${content.clientEmail}`, { indent: INDENT, size: 9.5, color: MUTED })

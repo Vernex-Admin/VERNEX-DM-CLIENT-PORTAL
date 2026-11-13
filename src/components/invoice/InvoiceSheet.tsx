@@ -8,6 +8,7 @@ import type { InvoiceDocument, InvoiceLine } from '../../types/invoiceDocument'
 import { Icon } from '../Icon'
 import { Button } from '../ui'
 import { AutoTextarea, NumberInput } from './inputs'
+import { isGentechCompany } from '../../lib/brand'
 
 // The Vernex A4 invoice, laid out after the "Vernex DM - Invoice Generator" PDF template.
 // The same parts build three things: the continuous sheet the admin types into, the hidden copy
@@ -130,7 +131,9 @@ function sheetParts({ document, meta, images, stamp, edit }: InvoiceSheetProps) 
           ) : edit ? (
             <div className="ivx-logo-empty">No logo</div>
           ) : null}
-          <div className="ivx-tagline">{text(document.company.tagline, 'Tagline', company('tagline'), { placeholder: 'Tagline' })}</div>
+          {!isGentechCompany(document.company.name) && (
+            <div className="ivx-tagline">{text(document.company.tagline, 'Tagline', company('tagline'), { placeholder: 'Tagline' })}</div>
+          )}
         </div>
         <dl className="ivx-contact">
           <Row label="Phone:">{text(document.company.phone, 'Company phone', company('phone'))}</Row>

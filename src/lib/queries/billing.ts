@@ -6,10 +6,17 @@ import type { InvoiceDraftInput, InvoiceSettingsInput, PaymentStatusInput } from
 import type { DuplicateMode } from '../invoiceDocument'
 import { invoiceTotals } from '../money'
 import { keys, R } from './keys'
+import { isGentechCompany, useGentechBrand } from '../brand'
 import { nowIso, tempId, useOptimisticMutation } from './optimistic'
 
 export function useInvoices(filter: ClientFilter = {}) {
-  return useQuery({ queryKey: keys.list(R.invoices, filter), queryFn: () => data.invoices.list(filter) })
+  const gentech = Boolean(useGentechBrand())
+  return useQuery({
+    queryKey: keys.list(R.invoices, filter),
+    queryFn: () => data.invoices.list(filter),
+    // Each company sees only its own invoices.
+    select: (rows) => rows.filter((row) => isGentechCompany(row.document?.company.name ?? '') === gentech),
+  })
 }
 
 /** One invoice with its line items. */

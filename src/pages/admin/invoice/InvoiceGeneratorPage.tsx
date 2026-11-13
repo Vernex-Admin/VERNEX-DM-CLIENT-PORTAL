@@ -9,6 +9,7 @@ import type { SheetMeta } from '../../../components/invoice/InvoiceSheet'
 import { InvoiceWorkspace } from '../../../components/invoice/InvoiceWorkspace'
 import type { InvoiceWorkspaceHandle } from '../../../components/invoice/InvoiceWorkspace'
 import { QueryError } from '../../../components/QueryError'
+import { SendToClient } from '../../../components/SendToClient'
 import { Button, Checkbox, Dialog, Field, Input, Pill, Select, Skeleton, Tabs, Textarea, useToast } from '../../../components/ui'
 import { formatDate, formatDateTime, istDay } from '../../../lib/dates'
 import { documentFromLegacy, fillBillToFromClient, newInvoiceDocument, templateDocument } from '../../../lib/invoiceDocument'
@@ -16,6 +17,7 @@ import type { DuplicateMode } from '../../../lib/invoiceDocument'
 import { formatMoney, validateInvoice } from '../../../lib/invoiceMath'
 import { INVOICE_LIFECYCLE } from '../../../lib/labels'
 import { useCan } from '../../../lib/permissions'
+import { gentechInvoiceDefaults, useGentechBrand } from '../../../lib/brand'
 import {
   useClients,
   useDuplicateInvoice,
@@ -125,8 +127,8 @@ export default function InvoiceGeneratorPage() {
   )
 }
 
-function newDraft(settings: InvoiceSettings, clientId: string, projectTitle: string, clients: Client[]): Draft {
-  const document = newInvoiceDocument(settings.defaults)
+function newDraft(settings: InvoiceSettings, clientId: string, projectTitle: string, clients: Client[], gentech = false): Draft {
+  const document = newInvoiceDocument(gentech ? gentechInvoiceDefaults(settings.defaults) : settings.defaults)
   const client = clients.find((row) => row.id === clientId)
   if (client) document.bill_to = fillBillToFromClient(document.bill_to, client)
   if (projectTitle) document.project.name = projectTitle
@@ -151,10 +153,11 @@ function Editor(props: {
   onOpen: (id: string) => void
 }) {
   const { settings, clients } = props
+  const gentech = !!useGentechBrand()
   const toast = useToast()
   const workspace = useRef<InvoiceWorkspaceHandle>(null)
   const [draft, setDraft] = useState<Draft>(() =>
-    props.initial ? draftFromInvoice(props.initial) : newDraft(settings, props.clientId, props.projectTitle, clients),
+    props.initial ? draftFromInvoice(props.initial) : newDraft(settings, props.clientId, props.projectTitle, clients, gentech),
   )
   const [savedAs, setSavedAs] = useState(() => (props.initial ? snapshot(draftFromInvoice(props.initial)) : ''))
   const [showIssueChecks, setShowIssueChecks] = useState(false)
@@ -340,7 +343,7 @@ function Editor(props: {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!locked && (
+          {!locked && !gentech && (
             <>
               <Button onClick={() => void saveDraft()} loading={save.isPending} disabled={busy}>
                 <Icon icon={FileText} size={15} />
@@ -380,6 +383,16 @@ function Editor(props: {
           </Button>
         </div>
       </div>
+
+      {gentech && (
+        <SendToClient
+          subject="Invoice from Vernex Gen Technologies"
+          message={`Hello ${draft.document.bill_to.contact_person || draft.document.bill_to.company_name},
+
+Please find attached the invoice${draft.document.project.name ? ` for ${draft.document.project.name}` : ''} from Vernex Gen Technologies.`}
+          download={() => workspace.current?.downloadPdf()}
+        />
+      )}
 
       {reviewing && (
         <section aria-label="Final review" className="no-print flex flex-wrap items-center justify-between gap-3 rounded-card border border-gold bg-surface p-3">
@@ -423,7 +436,7 @@ function Editor(props: {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="ivx-editor-grid grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <InvoiceWorkspace
           ref={workspace}
           fileName={fileName}

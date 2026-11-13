@@ -2,11 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { data } from '../../data'
 import type { AgreementDraftInput, AgreementTemplateInput } from '../../data'
 import { keys, R } from './keys'
+import { useGentechBrand } from '../brand'
 
 export function useAgreements(clientId?: string) {
+  const gentech = Boolean(useGentechBrand())
   return useQuery({
     queryKey: keys.list(R.agreements, { client_id: clientId }),
     queryFn: () => data.agreements.list(clientId),
+    // Each company sees only its own agreements.
+    select: (rows) => rows.filter((row) => Boolean(row.content.letterhead) === gentech),
   })
 }
 

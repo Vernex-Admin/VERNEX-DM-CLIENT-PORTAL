@@ -16,8 +16,12 @@ export type AgreementContent = {
   companyTitle: string
   logoUrl?: string | null
   tagline?: string
+  /** Replaces the company block printed on the letterhead and closing page. */
+  letterhead?: AgreementLetterhead
   clauses: AgreementClause[]
 }
+
+export type AgreementLetterhead = { name: string; phone: string; website: string; logoUrl: string; email?: string }
 
 export type AgreementStatus =
   | 'draft'

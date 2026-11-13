@@ -207,6 +207,11 @@
    Fonts are self-hosted (@fontsource) so the screen and the PDF use the same files.
    --------------------------------------------------------------------------- */
 .ivx-desk { height: calc(100dvh - 15rem); min-height: 30rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: var(--radius-card); background: var(--invoice-desk); padding: 20px; }
+/* Wide screens: the preview stays on screen at full height while the settings column scrolls. */
+@media (min-width: 1280px) {
+  .ivx-editor-grid > :first-child { position: sticky; top: 3.75rem; align-self: start; }
+  .ivx-editor-grid .ivx-desk { height: calc(100dvh - 10rem); }
+}
 .ivx-stage { width: max-content; margin: 0 auto; }
 .ivx-stage.editing { padding-right: 100px; padding-left: 70px; }
 .ivx-sheet, .ivx-page { position: relative; box-sizing: border-box; width: 210mm; padding: 8mm; background: #fff; color: var(--invoice-text); font: 9pt/1.35 Arimo, Arial, sans-serif; text-align: left; outline: 1px solid #D9D4CC; }
