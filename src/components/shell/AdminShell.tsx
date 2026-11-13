@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useSearchParams } from 'react-router'
 import { cn } from '../../lib/cn'
 import { useCan } from '../../lib/permissions'
+import { useGentechBrand } from '../../lib/brand'
 import { useClients } from '../../lib/queries'
 import { Icon } from '../Icon'
 import { Pill, Select } from '../ui'
@@ -11,6 +12,7 @@ import { UserMenu } from './UserMenu'
 type NavItem = { to: string; label: string; icon: LucideIcon; show: boolean }
 
 export function AdminShell() {
+  const brand = useGentechBrand()
   const canManageAccess = useCan('client_access', 'view')
   const canManageClients = useCan('client', 'create')
   const { data: clients = [] } = useClients(canManageClients)
@@ -34,11 +36,15 @@ export function AdminShell() {
     <div className="admin-shell min-h-dvh bg-paper text-[1rem] text-ink lg:text-[13px]">
       <header className="admin-shell-header sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-rule bg-surface px-3">
         <div className="flex min-w-0 items-center gap-3">
-          <img
-            src="/vernex-digital-marketing.png"
-            alt="Vernex Digital Marketing"
-            className="h-12 w-36 object-cover object-center"
-          />
+          {brand ? (
+            <img src={brand.logoUrl} alt={brand.name} className="h-9 w-32 object-contain object-left" />
+          ) : (
+            <img
+              src="/vernex-digital-marketing.png"
+              alt="Vernex Digital Marketing"
+              className="h-12 w-36 object-cover object-center"
+            />
+          )}
           <Pill tone="neutral">Vernex team</Pill>
         </div>
         <div className="flex items-center gap-2">

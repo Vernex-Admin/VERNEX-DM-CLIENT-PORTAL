@@ -233,7 +233,7 @@ export const mockAgreements: AgreementsRepo = {
         signedAt: clientSignedAt,
         timeZone: clientTimeZone,
         founderSignedAt,
-      })
+      }, input.signed_content?.letterhead)
     }
     const link = dataUrl(finalBytes, 'application/pdf')
     return run(() => {

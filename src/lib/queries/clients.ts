@@ -3,6 +3,7 @@ import { data } from '../../data'
 import type { MyProfilePatch } from '../../data'
 import type { Client, ClientAssignment, ClientInsert, NotificationPrefs, Profile, ProfileInsert, Update } from '../../types/db'
 import { keys, R } from './keys'
+import { useGentechBrand } from '../brand'
 import { nowIso, tempId, useOptimisticMutation } from './optimistic'
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -15,7 +16,9 @@ const DEFAULT_PREFS: NotificationPrefs = {
 }
 
 export function useClients(enabled = true) {
-  return useQuery({ queryKey: keys.list(R.clients), queryFn: () => data.clients.list(), enabled })
+  // Vernex Gen Technologies does not work with the Digital Marketing portal clients.
+  const gentech = Boolean(useGentechBrand())
+  return useQuery({ queryKey: keys.list(R.clients), queryFn: () => data.clients.list(), enabled, select: (rows) => (gentech ? [] : rows) })
 }
 
 export function useClient(id: string | undefined) {

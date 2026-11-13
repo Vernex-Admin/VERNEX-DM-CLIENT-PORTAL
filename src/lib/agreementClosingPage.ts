@@ -1,4 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import type { PDFPage } from 'pdf-lib'
+import type { AgreementLetterhead } from '../types/agreement'
 
 // The fixed last page ("Thank you for choosing Vernex", both signature blocks). It is the same for
 // every client: nothing is written on it until the client has signed. Then the client's signature,
@@ -24,6 +26,53 @@ function formatDate(value: string, timeZone: string | null | undefined) {
   }
 }
 
+/** Covers the Digital Marketing logo, header text, thank-you paragraph and signer company. */
+async function rebrandClosingPage(document: PDFDocument, page: PDFPage, brand: AgreementLetterhead) {
+  const font = await document.embedFont(StandardFonts.Helvetica)
+  const bold = await document.embedFont(StandardFonts.HelveticaBold)
+  const scale = A4_WIDTH / 595.5
+  const box = page.getMediaBox()
+  const at = (x: number, y: number) => ({ x: box.x + x * scale, y: box.y + y * scale })
+  const cover = (x: number, y: number, width: number, height: number, color: ReturnType<typeof rgb>) =>
+    page.drawRectangle({ ...at(x, y), width: width * scale, height: height * scale, color })
+  const ink = rgb(0.05, 0.05, 0.05)
+  const grey = rgb(236 / 255, 238 / 255, 237 / 255)
+  const white = rgb(1, 1, 1)
+
+  // Header: logo on the left, company block on the right.
+  cover(28, 730, 260, 106, grey)
+  cover(330, 730, 262, 88, grey)
+  const response = await fetch(brand.logoUrl)
+  if (response.ok) {
+    const logo = await document.embedPng(new Uint8Array(await response.arrayBuffer()))
+    const size = logo.scale(Math.min((200 * scale) / logo.width, (72 * scale) / logo.height))
+    page.drawImage(logo, { ...at(52, 742), width: size.width, height: size.height })
+  }
+  const right = (text: string, y: number, size: number, f = font) =>
+    page.drawText(text, { ...at(571 - f.widthOfTextAtSize(text, size), y), size: size * scale, font: f, color: ink })
+  right(brand.name, 798.5, 13, bold)
+  right(brand.phone, 783.5, 10.5)
+  if (brand.email) right(brand.email, 768.5, 9)
+  right(brand.website, 745, 11.5, bold)
+
+  // The thank-you paragraph, rewrapped for this company.
+  cover(50, 534, 470, 88, white)
+  const paragraph = `Thank you for choosing ${brand.name} as your technology partner. We look forward to building a transparent, collaborative partnership focused on meaningful results, consistent communication, and long-term growth for your business.`
+  const lines: string[] = []
+  for (const word of paragraph.split(' ')) {
+    const last = lines[lines.length - 1]
+    if (last !== undefined && font.widthOfTextAtSize(`${last} ${word}`, 11) <= 450) lines[lines.length - 1] = `${last} ${word}`
+    else lines.push(word)
+  }
+  lines.forEach((line, index) =>
+    page.drawText(line, { ...at(56, 603 - index * 20.5), size: 11 * scale, font, color: rgb(0.15, 0.15, 0.18) }),
+  )
+
+  // Company line under "CEO & Founder".
+  cover(52, 209, 200, 23, white)
+  page.drawText(brand.name, { ...at(56, 216), size: 11 * scale, font, color: ink })
+}
+
 export async function appendClosingPage(
   agreementPdf: Uint8Array,
   closingPagePdf: Uint8Array,
@@ -35,6 +84,8 @@ export async function appendClosingPage(
     /** When the founder approved; written on the founder's Date line once the client has signed. */
     founderSignedAt?: string | null
   },
+  /** Another company's letterhead over the Vernex Digital Marketing artwork. */
+  brand?: AgreementLetterhead | null,
 ) {
   const document = await PDFDocument.load(agreementPdf)
   const template = await PDFDocument.load(closingPagePdf)
@@ -43,6 +94,7 @@ export async function appendClosingPage(
   const sourceSize = page.getSize()
   page.scale(A4_WIDTH / sourceSize.width, A4_HEIGHT / sourceSize.height)
   document.addPage(page)
+  if (brand) await rebrandClosingPage(document, page, brand)
 
   // Unsigned: the page goes in exactly as designed.
   if (!client.signedAt) return document.save()

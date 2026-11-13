@@ -1,5 +1,6 @@
 import { DEFAULT_LOGO_URL, DEFAULT_QR_URL, documentImagePaths } from '../../lib/invoiceDocument'
 import { useInvoiceImageUrls } from '../../lib/queries'
+import { GENTECH_LETTERHEAD, isGentechCompany } from '../../lib/brand'
 import type { ImageRef, InvoiceDocument } from '../../types/invoiceDocument'
 
 function resolve(image: ImageRef, urls: Record<string, string> | undefined, builtIn: string): string | null {
@@ -13,7 +14,7 @@ export function useInvoiceImages(document: InvoiceDocument | null | undefined) {
   const urls = useInvoiceImageUrls(document ? documentImagePaths(document) : [])
   if (!document) return { logo: null, qr: null }
   return {
-    logo: resolve(document.company.logo, urls.data, DEFAULT_LOGO_URL),
+    logo: resolve(document.company.logo, urls.data, isGentechCompany(document.company.name) ? GENTECH_LETTERHEAD.logoUrl : DEFAULT_LOGO_URL),
     qr: resolve(document.payment.qr, urls.data, DEFAULT_QR_URL),
   }
 }
