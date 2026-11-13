@@ -85,7 +85,7 @@ describe('agreement signing workflow', () => {
     const bytes = Uint8Array.from(atob(link.split(',')[1] as string), (char) => char.charCodeAt(0))
     const { pdf, text } = await pdfText(bytes)
     expect(pdf.getTitle()).toBe('Portal Refresh Agreement')
-    expect(text).toContain('PORTAL REFRESH AGREEMENT')
+    expect(text).toContain('CLIENT SERVICE AGREEMENT')
     expect(text).toContain('BOSS ANANDAA')
     expect(text).toContain('AGK Signer')
     expect(text).not.toContain('Signed (UTC):')

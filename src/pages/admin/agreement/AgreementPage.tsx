@@ -6,7 +6,7 @@ import { Icon } from '../../../components/Icon'
 import { SendToClient } from '../../../components/SendToClient'
 import { Button, Card, CardBody, Field, Input, Select, useToast } from '../../../components/ui'
 import { useCan } from '../../../lib/permissions'
-import { GENTECH_CLAUSES, useGentechBrand } from '../../../lib/brand'
+import { DM_CLIENT_CLAUSES, GENTECH_CLAUSES, useGentechBrand } from '../../../lib/brand'
 import {
   useAgreementTemplates, useAgreements, useCancelAgreement, useClient, useClients,
   useAgreementEvents, useCreateAgreementDraft, useFounderSignAndSend, useGenerateFinalAgreementPdf, useRequestFounderSignature,
@@ -52,87 +52,6 @@ function Timestamp({ label, value }: { label: string; value: string | null }) {
   return <span className="text-xs text-ink-muted">{label}: {value ? formatLocalTimestamp(value) : 'Not signed'}</span>
 }
 
-const DEFAULT_CLAUSES: Clause[] = [
-  {
-    id: 'c1',
-    number: 1,
-    title: 'Scope of Engagement',
-    body: 'The Developer is engaged for the development of the project titled "{{projectTitle}}". The scope of work includes UI/UX design, frontend development, and backend tasks as assigned by the Company. The Developer shall perform all assigned tasks in accordance with the Company\'s instructions, timelines, and quality standards.',
-  },
-  {
-    id: 'c2',
-    number: 2,
-    title: 'Term',
-    body: 'This Agreement shall commence on the date of execution and shall continue until completion of the assigned work unless terminated earlier as per this Agreement.',
-  },
-  {
-    id: 'c3',
-    number: 3,
-    title: 'Compensation',
-    body: 'The Company shall release payment to the Developer only when the product is finalized and ready for sale or commercialization. The Developer shall be paid a fixed amount of ₹8,000 (Rupees Eight Thousand Only). Upon satisfactory and timely completion, the Company may, at its sole discretion, provide an additional bonus amount, making the total payment up to ₹10,000 (Rupees Ten Thousand Only). This shall be full and final compensation.',
-  },
-  {
-    id: 'c4',
-    number: 4,
-    title: 'Ownership and Intellectual Property',
-    body: 'All work created under this Agreement shall be treated as “work made for hire”. The Developer irrevocably assigns all rights, title, and interest in the work to the Company. This includes source code, UI/UX designs, databases, architecture, and all related assets. The Developer shall have no ownership or claim over the project or any part of it.',
-  },
-  {
-    id: 'c5',
-    number: 5,
-    title: 'No Royalty or Future Claims',
-    body: 'The Developer shall not be entitled to any royalty, revenue share, equity, or future financial benefit from the project. The agreed compensation is full and final settlement.',
-  },
-  {
-    id: 'c6',
-    number: 6,
-    title: 'Authority and Reporting',
-    body: 'The Developer shall work under the direct authority of Mr. BOSS ANANDAA, CEO & Founder of VerneX. The Company has full rights to assign tasks, modify responsibilities, and designate roles such as Database Manager or other technical authorities.',
-  },
-  {
-    id: 'c7',
-    number: 7,
-    title: 'Confidentiality',
-    body: 'The Developer shall maintain strict confidentiality of all project-related information, including code, designs, data, and internal processes. This obligation continues even after termination of this Agreement.',
-  },
-  {
-    id: 'c8',
-    number: 8,
-    title: 'Non-Compete and Non-Misuse',
-    body: 'The Developer shall not reuse, copy, distribute, or claim ownership of any part of the project. The Developer shall not engage in any activity that may harm the Company’s interests.',
-  },
-  {
-    id: 'c9',
-    number: 9,
-    title: 'Termination',
-    body: 'The Company may terminate this Agreement in case of breach, delay, misconduct, or failure. Upon termination, the Developer must hand over all work completed. No further payment shall be made for incomplete or unsatisfactory work.',
-  },
-  {
-    id: 'c10',
-    number: 10,
-    title: 'Breach and Legal Action',
-    body: 'Any violation of this Agreement shall be treated as a material breach. The Company reserves the right to take legal action, including claiming damages and seeking injunctions.',
-  },
-  {
-    id: 'c11',
-    number: 11,
-    title: 'Independent Contractor',
-    body: 'The Developer is an independent contractor. This Agreement does not create any partnership, employment, or ownership relationship.',
-  },
-  {
-    id: 'c12',
-    number: 12,
-    title: 'Governing Law and Jurisdiction',
-    body: 'This Agreement shall be governed by the laws of India. Any disputes shall be subject to the jurisdiction of the courts in Chennai, Tamil Nadu.',
-  },
-  {
-    id: 'c13',
-    number: 13,
-    title: 'Entire Agreement',
-    body: 'This document constitutes the entire agreement between the parties and supersedes all prior discussions or understandings.',
-  },
-]
-
 export default function AgreementPage() {
   const { id: paramClientId } = useParams()
   const [params] = useSearchParams()
@@ -170,8 +89,8 @@ export default function AgreementPage() {
   const [developerName, setDeveloperName] = useState('Haran')
   const [companySigner, setCompanySigner] = useState('BOSS ANANDAA')
   const [companyTitle, setCompanyTitle] = useState('CEO & Founder')
-  const [companyName, setCompanyName] = useState(brand?.name ?? 'VerneX')
-  const [clauses, setClauses] = useState<Clause[]>(brand ? GENTECH_CLAUSES : DEFAULT_CLAUSES)
+  const [companyName, setCompanyName] = useState(brand?.name ?? 'Vernex Digital Marketing')
+  const [clauses, setClauses] = useState<Clause[]>(brand ? GENTECH_CLAUSES : DM_CLIENT_CLAUSES)
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [services, setServices] = useState('')
@@ -440,21 +359,18 @@ export default function AgreementPage() {
         </div>
       </div>
 
-      {brand && (
-        <SendToClient
-          subject={`Agreement: ${projectTitle} - Vernex Gen Technologies`}
-          message={`Hello ${clientName || developerName},
-
-Please find attached the agreement for ${projectTitle} from Vernex Gen Technologies.`}
-          download={() => {
-            if (!previewUrl) throw new Error('The agreement is still being prepared. Try again in a moment.')
-            const link = document.createElement('a')
-            link.href = previewUrl
-            link.download = `${projectTitle || 'Vernex Gen Technologies'} Agreement.pdf`
-            link.click()
-          }}
-        />
-      )}
+      <SendToClient
+        title="Agreement"
+        description={`the agreement for ${projectTitle.trim() || 'our services'}`}
+        recipient={clientName}
+        download={() => {
+          if (!previewUrl) throw new Error('The agreement is still being prepared. Try again in a moment.')
+          const link = document.createElement('a')
+          link.href = previewUrl
+          link.download = `${projectTitle.trim() || 'Services'} Agreement.pdf`
+          link.click()
+        }}
+      />
 
       {/* Main split grid: Controls on left, Live Agreement Document on right */}
       <div className="agreement-editor-layout grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-12">
@@ -486,7 +402,7 @@ Please find attached the agreement for ${projectTitle} from Vernex Gen Technolog
                   setCompanyTitle(content.companyTitle)
                   setLogoUrl(brand?.logoUrl ?? content.logoUrl ?? null)
                   setTagline(brand ? '' : content.tagline ?? 'Crafting your digital narrative.')
-                  setClauses(content.clauses.length ? content.clauses : brand ? GENTECH_CLAUSES : DEFAULT_CLAUSES)
+                  setClauses(content.clauses.length ? content.clauses : brand ? GENTECH_CLAUSES : DM_CLIENT_CLAUSES)
                 }}>
                   <option value="">Start from current agreement</option>
                   {(templates.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
