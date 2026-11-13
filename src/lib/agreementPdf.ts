@@ -25,7 +25,7 @@ const PAGE_HEIGHT = 841.89
 // Measured on the letterhead: the header band ends 150pt from the top and the footer shape rises
 // 30pt from the bottom. The side margins line up with the text on the closing page.
 const MARGIN_X = 58
-// Filing margin for Gen Technologies agreements. An A4 hole punch (ISO 838) makes 6mm holes
+// Filing margin for every agreement. An A4 hole punch (ISO 838) makes 6mm holes
 // centred 12mm from the left edge, so they reach 15-16mm in. A 25mm left margin (70.9pt) keeps
 // every line about 9mm clear of the holes; the right margin stays at 58pt (20.5mm).
 const FILING_MARGIN_LEFT = (25 * 72) / 25.4
@@ -72,7 +72,7 @@ const REPLACEMENTS: [RegExp, string][] = [
 ]
 
 /** Characters the standard fonts cannot draw are mapped or simplified (ā -> a); only the rest become "?". */
-function printable(value: string, font: PDFFont): string {
+export function printable(value: string, font: PDFFont): string {
   const supported = new Set(font.getCharacterSet())
   const has = (text: string) => Array.from(text).every((char) => supported.has(char.codePointAt(0) as number))
   const text = REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value)
@@ -147,7 +147,7 @@ class Writer {
     private readonly letterhead: PDFEmbeddedPage | null,
     private readonly branding?: AgreementBranding,
   ) {
-    this.left = branding?.company ? FILING_MARGIN_LEFT : MARGIN_X
+    this.left = FILING_MARGIN_LEFT
     this.contentWidth = PAGE_WIDTH - this.left - MARGIN_X
     this.newPage()
   }
@@ -323,30 +323,22 @@ export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8
   }
 
   const w = new Writer(document, fonts, letterhead, branding)
-  const gentech = Boolean(content.letterhead)
   const clientParty = content.clientName.trim() || 'the Client'
   const fill = (body: string) =>
     body
-      .replace(/{{projectTitle}}/g, content.projectTitle.trim() || (gentech ? 'the Project' : ''))
+      .replace(/{{projectTitle}}/g, content.projectTitle.trim() || 'the Project')
       .replace(/{{developerName}}/g, content.developerName)
       .replace(/{{clientName}}/g, clientParty)
       .replace(/{{companyName}}/g, content.companyName)
       .replace(/{{companySigner}}/g, content.companySigner)
 
-  // Title block. Gen Technologies agreements are between the company and its client.
-  w.text(gentech ? 'CLIENT SERVICE AGREEMENT' : 'DEVELOPER ENGAGEMENT & NON-OWNERSHIP AGREEMENT', { size: 13, bold: true, align: 'center', color: NAVY, leading: 18 })
+  // Title block: an agreement between the company and its client.
+  w.text('CLIENT SERVICE AGREEMENT', { size: 13, bold: true, align: 'center', color: NAVY, leading: 18 })
   w.space(4)
   w.rule(110)
   w.space(14)
-  if (gentech) {
-    w.text(`${content.companyName} and ${clientParty}`.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
-    if (content.projectTitle.trim()) w.text(`Project: ${content.projectTitle.trim()}`, { size: 10, align: 'center', color: MUTED })
-  } else {
-    w.text(input.title.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
-    if (content.projectTitle.trim() && !input.title.toLowerCase().includes(content.projectTitle.trim().toLowerCase())) {
-      w.text(content.projectTitle, { size: 10, align: 'center', color: MUTED })
-    }
-  }
+  w.text(`${content.companyName} and ${clientParty}`.toUpperCase(), { size: 11, bold: true, align: 'center', leading: 16 })
+  if (content.projectTitle.trim()) w.text(`Project: ${content.projectTitle.trim()}`, { size: 10, align: 'center', color: MUTED })
   w.space(10)
   if (content.agreementDate.trim()) w.text(`Date: ${displayDate(content.agreementDate)}`, { size: 9.5, align: 'right', color: MUTED })
   w.space(6)
@@ -355,16 +347,14 @@ export async function buildAgreementPdf(input: AgreementPdfInput): Promise<Uint8
   w.text(`This Agreement is made on this ${displayDate(content.agreementDate)}, at Chennai, India, by and between:`, { align: 'justify' })
   w.space(4)
   w.text(
-    `${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "${gentech ? 'Service Provider' : 'Company'}" (which includes its successors and assigns),`,
+    `${content.companyName}, represented by Mr. ${content.companySigner}, ${content.companyTitle}, hereinafter referred to as the "Service Provider" (which includes its successors and assigns),`,
     { indent: INDENT, align: 'justify', keep: 2 },
   )
   w.space(4)
   w.text('AND', { bold: true, align: 'center' })
   w.space(4)
   w.text(
-    gentech
-      ? `${clientParty}, hereinafter referred to as the "Client" (which expression shall include its successors, legal representatives, and permitted assigns).`
-      : `${content.clientName || content.developerName}, hereinafter referred to as the "Developer" (which expression shall include his heirs, legal representatives, and permitted assigns).`,
+    `${clientParty}, hereinafter referred to as the "Client" (which expression shall include its successors, legal representatives, and permitted assigns).`,
     { indent: INDENT, align: 'justify', keep: 2 },
   )
   if (content.clientEmail.trim()) w.text(`Email: ${content.clientEmail}`, { indent: INDENT, size: 9.5, color: MUTED })

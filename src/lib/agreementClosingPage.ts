@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { PDFPage } from 'pdf-lib'
 import type { AgreementLetterhead } from '../types/agreement'
+import { printable } from './agreementPdf'
 
 // The fixed last page ("Thank you for choosing Vernex", both signature blocks). It is the same for
 // every client: nothing is written on it until the client has signed. Then the client's signature,
@@ -109,7 +110,8 @@ export async function appendClosingPage(
   const at = (x: number, y: number) => ({ x: box.x + x * scale, y: box.y + y * scale })
 
   /** Text that sits just above a line, shrunk to fit its width. */
-  const onLine = (text: string, line: { x: number; y: number; width: number }, size = 10) => {
+  const onLine = (raw: string, line: { x: number; y: number; width: number }, size = 10) => {
+    const text = printable(raw, font)
     const fitted = Math.max(6, Math.min(size, (size * (line.width - 4)) / Math.max(font.widthOfTextAtSize(text, size), 1)))
     page.drawText(text, { ...at(line.x + 2, line.y + 3), size: fitted * scale, font, color: ink })
   }

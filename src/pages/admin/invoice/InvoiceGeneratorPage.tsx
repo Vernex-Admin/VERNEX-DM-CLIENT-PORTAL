@@ -384,15 +384,12 @@ function Editor(props: {
         </div>
       </div>
 
-      {gentech && (
-        <SendToClient
-          subject="Invoice from Vernex Gen Technologies"
-          message={`Hello ${draft.document.bill_to.contact_person || draft.document.bill_to.company_name},
-
-Please find attached the invoice${draft.document.project.name ? ` for ${draft.document.project.name}` : ''} from Vernex Gen Technologies.`}
-          download={() => workspace.current?.downloadPdf()}
-        />
-      )}
+      <SendToClient
+        title="Invoice"
+        description={`${draft.number ? `invoice ${draft.number}` : 'the invoice'}${draft.document.project.name ? ` for ${draft.document.project.name}` : ''}`}
+        recipient={draft.document.bill_to.contact_person || draft.document.bill_to.company_name}
+        download={() => workspace.current?.downloadPdf()}
+      />
 
       {reviewing && (
         <section aria-label="Final review" className="no-print flex flex-wrap items-center justify-between gap-3 rounded-card border border-gold bg-surface p-3">
